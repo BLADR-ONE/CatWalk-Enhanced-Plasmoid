@@ -1,0 +1,31 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "BLADR-ONE",
+                "Website": "https://github.com/BLADR-ONE",
+                "Role": "Developer"
+            }
+        ],
+        "BugReportUrl": "https://github.com/BLADR-ONE/CatWalk-Enhanced-Plasmoid/issues",
+        "Category": "System",
+        "Description": "Enhanced CPU cat monitor with dynamic spacing, flexible layouts (side-by-side or stacked), swap options (right or left), and improved sizing. Fork of CatWalk by Yuri Saurov.",
+        "EnabledByDefault": true,
+        "FormFactors": [
+            "tablet",
+            "handset",
+            "desktop"
+        ],
+        "Icon": "animal-symbolic",
+        "Id": "org.kde.plasma.catwalkEnhanced",
+        "License": "GPL-3.0+",
+        "Name": "CatWalk Enhanced",
+        "Website": "https://github.com/BLADR-ONE/CatWalk-Enhanced-Plasmoid",
+        "Version": "1.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-Plasma-Provides": [
+        "org.kde.plasma.systemmonitor"
+    ]
+}
