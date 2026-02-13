@@ -1,6 +1,6 @@
 # 🎉 Catwalk Enhanced - Enhanced CPU Cat Monitor for KDE Plasma
 
-[![Catwalk Enhanced Demo](https://raw.githubusercontent.com/BLADR-ONE/CatWalk-Enhanced-Plasmoid/refs/heads/main/catWalkEnhanced.gif?token=GHSAT0AAAAAADVMRTUWBKXMARUSFW7R4J6E2MOGYSQ)](https://github.com/BLADR-ONE/CatWalk-Enhanced-Plasmoid)
+[![Catwalk Enhanced Demo](https://raw.githubusercontent.com/BLADR-ONE/CatWalk-Enhanced-Plasmoid/refs/heads/main/catWalkEnhanced.gif)](https://github.com/BLADR-ONE/CatWalk-Enhanced-Plasmoid)
 
 **Enhanced fork of the adorable [CatWalk CPU monitor](https://www.pling.com/p/2137844)** 🐱💻
 
