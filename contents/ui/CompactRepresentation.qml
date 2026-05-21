@@ -61,15 +61,17 @@ Item {
         : catBlockWidth + dividerBlockWidth + textBlockWidth + 2 * baseSpacing
 
     property real totalMinHeight: useVertical
-        ? catBlockHeight + dividerBlockHeight + textBlockHeight + configuredSpacing * (showDivider ? 2 : 1)
+        ? catBlockHeight + plasmoid.configuration.catExtraPadding + dividerBlockHeight + textBlockHeight
+          + configuredSpacing * (showDivider ? 2 : 1)
         : Math.max(catBlockHeight, textBlockHeight)
 
     Layout.minimumWidth:    totalMinWidth
     Layout.minimumHeight:   totalMinHeight
     Layout.preferredWidth:  totalMinWidth
     Layout.preferredHeight: totalMinHeight
-    Layout.maximumWidth:   -1
-    Layout.maximumHeight:   useVertical ? totalMinHeight : -1
+    Layout.maximumWidth:  -1
+    // Vertical fixed: cap at natural content height. Vertical auto: uncap so widget fills panel height.
+    Layout.maximumHeight: (useVertical && !spacingIsAuto) ? totalMinHeight : -1
 
     // ── Layout detection (used by parent context) ─────────────────────────────
 
@@ -103,7 +105,9 @@ Item {
     //   columnSpacing = configuredSpacing when fixed; fills available width when auto.
     //   In fixed mode grid.width = natural content width; anchors.centerIn handles centering.
     //
-    // Vertical: 1 column, 2 or 3 rows (cat, [divider,] text). rowSpacing = configuredSpacing.
+    // Vertical: 1 column, 2–3 rows (cat, [divider,] text).
+    //   Auto: rowSpacing fills available height (mirrors horizontal auto behaviour).
+    //   Fixed: rowSpacing = configuredSpacing.
 
     GridLayout {
         id: grid
@@ -128,8 +132,20 @@ Item {
                     (compactRepresentation.width - catBlockWidth - dividerBlockWidth - textBlockWidth) / 2)
             return configuredSpacing
         }
-        // In vertical mode, apply the same configured spacing to row gaps as horizontal uses for columns
-        rowSpacing: useVertical ? configuredSpacing : baseSpacing
+        // Horizontal: fixed baseSpacing between the single row's items.
+        // Vertical fixed: use configuredSpacing.
+        // Vertical auto: distribute available height equally across row gaps (mirrors horizontal auto).
+        rowSpacing: {
+            if (!useVertical) return baseSpacing
+            if (spacingIsAuto) {
+                var numGaps = showDivider ? 2 : 1
+                var available = compactRepresentation.height
+                    - catBlockHeight - plasmoid.configuration.catExtraPadding
+                    - dividerBlockHeight - textBlockHeight
+                return Math.max(baseSpacing, available / numGaps)
+            }
+            return configuredSpacing
+        }
 
         // ── Cat ──────────────────────────────────────────────────────────────
 
@@ -151,6 +167,10 @@ Item {
             Layout.minimumHeight:   32 * catScaleFactor
             Layout.maximumWidth:    32 * catScaleFactor
             Layout.maximumHeight:   32 * catScaleFactor
+            // Extra margin between cat and divider in stacked layout — for symmetry testing.
+            // Compensates for the text label's implicit top/bottom font metrics padding.
+            Layout.topMargin:    (useVertical &&  plasmoid.configuration.swapOrder) ? plasmoid.configuration.catExtraPadding : 0
+            Layout.bottomMargin: (useVertical && !plasmoid.configuration.swapOrder) ? plasmoid.configuration.catExtraPadding : 0
 
             KSvg.SvgItem {
                 id: svgItem
@@ -182,10 +202,10 @@ Item {
 
             Rectangle {
                 anchors.centerIn: parent
-                // Horizontal layout: thin vertical bar spanning full cell height
-                // Vertical layout: short horizontal dash ~24px wide
+                // Horizontal layout: 1px vertical bar, height matches text glyph height (not full cell)
+                // Vertical layout: short 24px horizontal dash
                 width:  useVertical ? 24 : 1
-                height: useVertical ? 1 : parent.height
+                height: useVertical ? 1 : label.font.pixelSize
                 color:  Kirigami.Theme.textColor
                 opacity: 0.45
             }

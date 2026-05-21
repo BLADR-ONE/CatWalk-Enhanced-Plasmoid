@@ -19,6 +19,7 @@ KCM.SimpleKCM {
     property alias cfg_angryTemp:       angryTempSlider.value
     property alias cfg_tempSensorId:    tempSensorField.text
     property alias cfg_tempUpdateRate:  tempUpdateRateSpinBox.value
+    property alias cfg_catExtraPadding: catExtraPaddingSpinBox.value
 
     // customSpacing: -1 = auto, ≥0 = fixed px. Cannot use property alias because
     // the value toggles between -1 and a slider value — no single control maps to it.
@@ -35,7 +36,7 @@ KCM.SimpleKCM {
     Sensors.Sensor {
         id: previewSensor
         sensorId: tempSensorField.text
-        updateRateLimit: 2000
+        updateRateLimit: cfg_tempUpdateRate
     }
 
     Controls.ButtonGroup { id: spacingModeGroup }
@@ -80,7 +81,7 @@ KCM.SimpleKCM {
         Controls.RadioButton {
             id: spacingAutoRadio
             Kirigami.FormData.label: i18n("Mode")
-            text: i18n("Automatic — fill available width")
+            text: i18n("Automatic — fill available space")
             checked: spacingMode === 0
             onToggled: if (checked) { spacingMode = 0; cfg_customSpacing = -1 }
         }
@@ -180,6 +181,17 @@ KCM.SimpleKCM {
         }
 
         TextMetrics { id: scaleLabelMetrics; text: "200%" }
+
+        RowLayout {
+            Layout.fillWidth: true
+            Kirigami.FormData.label: i18n("Cat edge padding")
+
+            Controls.SpinBox {
+                id: catExtraPaddingSpinBox
+                from: 0; to: 50; stepSize: 1; editable: true
+            }
+            Controls.Label { text: i18n("px (stacked layout only — for symmetry testing)") }
+        }
 
         // ── Sensor ───────────────────────────────────────────────────────────
 

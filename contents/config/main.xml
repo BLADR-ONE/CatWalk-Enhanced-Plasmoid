@@ -47,5 +47,8 @@
         <entry name="tempUpdateRate" type="Int">
             <default>5000</default>
         </entry>
+        <entry name="catExtraPadding" type="Int">
+            <default>0</default>
+        </entry>
     </group>
 </kcfg>
