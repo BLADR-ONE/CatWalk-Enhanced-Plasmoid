@@ -9,9 +9,10 @@ import org.kde.plasma.plasmoid
 Item {
     id: compactRepresentation
 
-    property real catScaleFactorRaw: plasmoid.configuration.catScale || 1.0
-    property real textScaleFactor:   plasmoid.configuration.textScale || 1.0
-    property real catScaleFactor:    catScaleFactorRaw * 1.4
+    property real catScaleFactorRaw:   plasmoid.configuration.catScale || 1.0
+    property real textScaleFactor:     plasmoid.configuration.textScale || 1.0
+    property real catScaleFactor:      catScaleFactorRaw * 1.4
+    readonly property real dividerScaleFactor: plasmoid.configuration.dividerScale || 1.0
 
     readonly property bool useVertical: plasmoid.configuration.textBelowCat
 
@@ -45,13 +46,12 @@ Item {
     property real catBlockHeight: (plasmoid.configuration.type !== 2) ? 32 * catScaleFactor : 0
     property real textBlockWidth: (plasmoid.configuration.type !== 1) ? textMetrics.width + 16 * textScaleFactor : 0
     property real textBlockHeight:(plasmoid.configuration.type !== 1) ? 32 * textScaleFactor : 0
-    // Horizontal layout: narrow column for a vertical bar; vertical layout: no column width needed
-    property real dividerBlockWidth:  (!useVertical && showDivider) ? 8 : 0
-    // Vertical layout: 1px row for the horizontal rule (rowSpacing provides all visual gap)
-    property real dividerBlockHeight: (useVertical && showDivider) ? 1 : 0
+    property real dividerBlockWidth:  (!useVertical && showDivider) ? (plasmoid.configuration.dividerThickness + 6) : 0
+    property real dividerBlockHeight: (useVertical && showDivider) ? plasmoid.configuration.dividerThickness : 0
 
-    // Minimum gap per column-gap (2 gaps in horizontal 3-col layout)
     property real baseSpacing: 4
+    readonly property real maxBlockWidth: Math.max(catBlockWidth, textBlockWidth)
+    readonly property real dividerLength: Math.round(32 * dividerScaleFactor * 0.8)
 
     // ── Minimum / preferred sizes reported to the panel ──────────────────────
 
@@ -181,8 +181,8 @@ Item {
         }
 
         // ── Divider ──────────────────────────────────────────────────────────
-        // Horizontal layout: 1px-wide vertical bar centered in narrow column (like |).
-        // Vertical layout: 1px-tall short horizontal dash centered in the row (like —).
+        // Horizontal: vertical bar (thickness × dividerLength), centered in narrow column.
+        // Vertical: horizontal dash (dividerLength × thickness), centered in 1-row slot.
 
         Item {
             id: dividerContainer
@@ -192,20 +192,17 @@ Item {
             Layout.row:    useVertical ? 1 : 0
             Layout.alignment: Qt.AlignVCenter | Qt.AlignHCenter
 
-            // Horizontal mode: narrow fixed-width column; vertical mode: full column width, fixed height
-            Layout.preferredWidth:  useVertical ? Math.max(catBlockWidth, textBlockWidth) : dividerBlockWidth
+            Layout.preferredWidth:  useVertical ? maxBlockWidth : dividerBlockWidth
             Layout.minimumWidth:    0
-            Layout.maximumWidth:    useVertical ? Math.max(catBlockWidth, textBlockWidth) : dividerBlockWidth
+            Layout.maximumWidth:    useVertical ? maxBlockWidth : dividerBlockWidth
             Layout.preferredHeight: useVertical ? dividerBlockHeight : Math.max(catBlockHeight, textBlockHeight)
             Layout.minimumHeight:   0
             Layout.maximumHeight:   useVertical ? dividerBlockHeight : Math.max(catBlockHeight, textBlockHeight)
 
             Rectangle {
                 anchors.centerIn: parent
-                // Horizontal layout: 1px vertical bar, height matches text glyph height (not full cell)
-                // Vertical layout: short 24px horizontal dash
-                width:  useVertical ? 24 : 1
-                height: useVertical ? 1 : label.font.pixelSize
+                width:  useVertical ? dividerLength : plasmoid.configuration.dividerThickness
+                height: useVertical ? plasmoid.configuration.dividerThickness : dividerLength
                 color:  Kirigami.Theme.textColor
                 opacity: 0.45
             }

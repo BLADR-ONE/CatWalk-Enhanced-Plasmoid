@@ -50,5 +50,11 @@
         <entry name="catExtraPadding" type="Int">
             <default>0</default>
         </entry>
+        <entry name="dividerScale" type="Double">
+            <default>1.0</default>
+        </entry>
+        <entry name="dividerThickness" type="Int">
+            <default>1</default>
+        </entry>
     </group>
 </kcfg>

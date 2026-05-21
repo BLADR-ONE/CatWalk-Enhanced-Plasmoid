@@ -19,7 +19,9 @@ KCM.SimpleKCM {
     property alias cfg_angryTemp:       angryTempSlider.value
     property alias cfg_tempSensorId:    tempSensorField.text
     property alias cfg_tempUpdateRate:  tempUpdateRateSpinBox.value
-    property alias cfg_catExtraPadding: catExtraPaddingSpinBox.value
+    property alias cfg_catExtraPadding:  catExtraPaddingSpinBox.value
+    property alias cfg_dividerScale:     dividerScaleSlider.value
+    property alias cfg_dividerThickness: dividerThicknessSpinBox.value
 
     // customSpacing: -1 = auto, ≥0 = fixed px. Cannot use property alias because
     // the value toggles between -1 and a slider value — no single control maps to it.
@@ -30,6 +32,9 @@ KCM.SimpleKCM {
     Component.onCompleted: {
         spacingMode = cfg_customSpacing < 0 ? 0 : 1
         spacingModeGroup.buttons = [spacingAutoRadio, spacingSliderRadio, spacingManualRadio]
+        if (spacingMode === 0) spacingAutoRadio.checked = true
+        else if (spacingMode === 1) spacingSliderRadio.checked = true
+        else spacingManualRadio.checked = true
     }
 
     // Live sensor preview (reads whatever is typed in tempSensorField)
@@ -51,7 +56,12 @@ KCM.SimpleKCM {
             Kirigami.FormData.label: i18n("Link sizes")
             text: i18n("Keep cat and text same size")
             checked: true
-            onCheckedChanged: { if (checked) textScaleSlider.value = catScaleSlider.value }
+            onCheckedChanged: {
+                if (checked) {
+                    textScaleSlider.value = catScaleSlider.value
+                    dividerScaleSlider.value = catScaleSlider.value
+                }
+            }
         }
 
         Controls.CheckBox {
@@ -82,21 +92,18 @@ KCM.SimpleKCM {
             id: spacingAutoRadio
             Kirigami.FormData.label: i18n("Mode")
             text: i18n("Automatic — fill available space")
-            checked: spacingMode === 0
             onToggled: if (checked) { spacingMode = 0; cfg_customSpacing = -1 }
         }
 
         Controls.RadioButton {
             id: spacingSliderRadio
             text: i18n("Slider")
-            checked: spacingMode === 1
             onToggled: if (checked) { spacingMode = 1; cfg_customSpacing = Math.round(spacingSlider.value) }
         }
 
         Controls.RadioButton {
             id: spacingManualRadio
             text: i18n("Manual (exact pixels)")
-            checked: spacingMode === 2
             onToggled: if (checked) { spacingMode = 2; var v = parseInt(spacingManualField.text) || 0; cfg_customSpacing = v }
         }
 
@@ -154,7 +161,7 @@ KCM.SimpleKCM {
                 id: catScaleSlider
                 Layout.fillWidth: true
                 from: 0.25; to: 2.0; stepSize: 0.05; value: 1.0
-                onValueChanged: { if (linkCheckbox.checked) textScaleSlider.value = value }
+                onValueChanged: { if (linkCheckbox.checked) { textScaleSlider.value = value; dividerScaleSlider.value = value } }
             }
             Controls.Label {
                 text: Math.round(catScaleSlider.value * 100) + "%"
@@ -171,7 +178,7 @@ KCM.SimpleKCM {
                 Layout.fillWidth: true
                 from: 0.25; to: 2.0; stepSize: 0.05; value: 1.0
                 enabled: !linkCheckbox.checked
-                onValueChanged: { if (linkCheckbox.checked) catScaleSlider.value = value }
+                onValueChanged: { if (linkCheckbox.checked) { catScaleSlider.value = value; dividerScaleSlider.value = value } }
             }
             Controls.Label {
                 text: Math.round(textScaleSlider.value * 100) + "%"
@@ -184,11 +191,40 @@ KCM.SimpleKCM {
 
         RowLayout {
             Layout.fillWidth: true
+            Kirigami.FormData.label: i18n("Divider size")
+
+            Controls.Slider {
+                id: dividerScaleSlider
+                Layout.fillWidth: true
+                from: 0.25; to: 2.0; stepSize: 0.05; value: 1.0
+                enabled: !linkCheckbox.checked
+                onValueChanged: { if (linkCheckbox.checked) { catScaleSlider.value = value; textScaleSlider.value = value } }
+            }
+            Controls.Label {
+                text: Math.round(dividerScaleSlider.value * 100) + "%"
+                Layout.minimumWidth: scaleLabelMetrics.width
+                horizontalAlignment: Text.AlignRight
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            Kirigami.FormData.label: i18n("Divider thickness")
+
+            Controls.SpinBox {
+                id: dividerThicknessSpinBox
+                from: 1; to: 10; stepSize: 1; editable: true
+            }
+            Controls.Label { text: i18n("px") }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
             Kirigami.FormData.label: i18n("Cat edge padding")
 
             Controls.SpinBox {
                 id: catExtraPaddingSpinBox
-                from: 0; to: 50; stepSize: 1; editable: true
+                from: -50; to: 50; stepSize: 1; editable: true
             }
             Controls.Label { text: i18n("px (stacked layout only — for symmetry testing)") }
         }
