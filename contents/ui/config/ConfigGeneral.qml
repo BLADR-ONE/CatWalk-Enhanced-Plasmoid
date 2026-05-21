@@ -3,75 +3,162 @@ import QtQuick.Layouts
 import QtQuick.Controls as Controls
 import org.kde.kirigami as Kirigami
 import org.kde.kcmutils as KCM
+import org.kde.ksysguard.sensors as Sensors
 
 KCM.SimpleKCM {
-    property alias cfg_idle: idleSlider.value
-    property alias cfg_type: typeBox.currentIndex
+    property alias cfg_idle:            idleSlider.value
+    property alias cfg_type:            typeBox.currentIndex
     property alias cfg_updateRateLimit: updateRateLimitSpinBox.value
-    property alias cfg_catScale: catScaleSlider.value
-    property alias cfg_textScale: textScaleSlider.value
-    property alias cfg_linkScales: linkCheckbox.checked
+    property alias cfg_catScale:        catScaleSlider.value
+    property alias cfg_textScale:       textScaleSlider.value
+    property alias cfg_linkScales:      linkCheckbox.checked
+    property alias cfg_textBelowCat:    textBelowCatCheckBox.checked
+    property alias cfg_swapOrder:       swapOrderCheckBox.checked
+    property alias cfg_showDivider:     showDividerCheckBox.checked
+    property alias cfg_angryEnabled:    angryCheckbox.checked
+    property alias cfg_angryTemp:       angryTempSlider.value
+    property alias cfg_tempSensorId:    tempSensorField.text
+    property alias cfg_tempUpdateRate:  tempUpdateRateSpinBox.value
 
-    // New config options
-    property alias cfg_textBelowCat: textBelowCatCheckBox.checked
-    property alias cfg_swapOrder: swapOrderCheckBox.checked
+    // customSpacing: -1 = auto, ≥0 = fixed px. Cannot use property alias because
+    // the value toggles between -1 and a slider value — no single control maps to it.
+    property int cfg_customSpacing: -1
+
+    // Spacing UI mode: 0=auto, 1=slider, 2=manual. Not persisted — initialised from cfg_customSpacing.
+    property int spacingMode: 0
+    Component.onCompleted: {
+        spacingMode = cfg_customSpacing < 0 ? 0 : 1
+        spacingModeGroup.buttons = [spacingAutoRadio, spacingSliderRadio, spacingManualRadio]
+    }
+
+    // Live sensor preview (reads whatever is typed in tempSensorField)
+    Sensors.Sensor {
+        id: previewSensor
+        sensorId: tempSensorField.text
+        updateRateLimit: 2000
+    }
+
+    Controls.ButtonGroup { id: spacingModeGroup }
 
     Kirigami.FormLayout {
-        id: root
+        id: formRoot
+
+        // ── Layout ───────────────────────────────────────────────────────────
 
         Controls.CheckBox {
             id: linkCheckbox
             Kirigami.FormData.label: i18n("Link sizes")
             text: i18n("Keep cat and text same size")
             checked: true
-            onCheckedChanged: {
-                if (checked) {
-                    // When linking, sync text to cat
-                    textScaleSlider.value = catScaleSlider.value
-                }
-            }
+            onCheckedChanged: { if (checked) textScaleSlider.value = catScaleSlider.value }
         }
 
-        // Layout mode: side by side vs text below cat
         Controls.CheckBox {
             id: textBelowCatCheckBox
             Kirigami.FormData.label: i18n("Layout")
             text: i18n("Show text below cat (instead of side by side)")
-            checked: false
         }
 
-        // Swap order in both orientations
         Controls.CheckBox {
             id: swapOrderCheckBox
             text: i18n("Swap cat and text order")
-            checked: false
+        }
+
+        Controls.CheckBox {
+            id: showDividerCheckBox
+            text: i18n("Show divider between cat and text")
+        }
+
+        // ── Spacing ──────────────────────────────────────────────────────────
+
+        Kirigami.Separator {
+            Kirigami.FormData.label: i18n("Spacing")
+            Kirigami.FormData.isSection: true
+            Layout.fillWidth: true
+        }
+
+        Controls.RadioButton {
+            id: spacingAutoRadio
+            Kirigami.FormData.label: i18n("Mode")
+            text: i18n("Automatic — fill available width")
+            checked: spacingMode === 0
+            onToggled: if (checked) { spacingMode = 0; cfg_customSpacing = -1 }
+        }
+
+        Controls.RadioButton {
+            id: spacingSliderRadio
+            text: i18n("Slider")
+            checked: spacingMode === 1
+            onToggled: if (checked) { spacingMode = 1; cfg_customSpacing = Math.round(spacingSlider.value) }
+        }
+
+        Controls.RadioButton {
+            id: spacingManualRadio
+            text: i18n("Manual (exact pixels)")
+            checked: spacingMode === 2
+            onToggled: if (checked) { spacingMode = 2; var v = parseInt(spacingManualField.text) || 0; cfg_customSpacing = v }
+        }
+
+        RowLayout {
+            visible: spacingMode === 1
+            Layout.fillWidth: true
+            Kirigami.FormData.label: i18n("Gap")
+
+            Controls.Slider {
+                id: spacingSlider
+                Layout.fillWidth: true
+                from: 0; to: 500; stepSize: 1
+                value: cfg_customSpacing >= 0 ? cfg_customSpacing : 8
+                onMoved: cfg_customSpacing = Math.round(value)
+            }
+            Controls.Label {
+                text: Math.round(spacingSlider.value) + " px"
+                Layout.minimumWidth: spacingLabelMetrics.width
+                horizontalAlignment: Text.AlignRight
+            }
+            TextMetrics { id: spacingLabelMetrics; text: "500 px" }
+        }
+
+        RowLayout {
+            visible: spacingMode === 2
+            Layout.fillWidth: true
+            Kirigami.FormData.label: i18n("Gap")
+
+            Controls.TextField {
+                id: spacingManualField
+                Layout.fillWidth: true
+                text: cfg_customSpacing >= 0 ? cfg_customSpacing.toString() : "8"
+                inputMethodHints: Qt.ImhDigitsOnly
+                validator: IntValidator { bottom: 0; top: 500 }
+                onTextChanged: {
+                    var v = parseInt(text)
+                    if (!isNaN(v) && v >= 0 && v <= 500) cfg_customSpacing = v
+                }
+            }
+            Controls.Label { text: i18n("px") }
+        }
+
+        // ── Sizing ───────────────────────────────────────────────────────────
+
+        Kirigami.Separator {
+            Kirigami.FormData.label: i18n("Sizing")
+            Kirigami.FormData.isSection: true
+            Layout.fillWidth: true
         }
 
         RowLayout {
             Layout.fillWidth: true
             Kirigami.FormData.label: i18n("Cat size")
             Controls.Slider {
-                Layout.fillWidth: true
                 id: catScaleSlider
-                from: 0.25
-                to: 2.0
-                value: 1.0
-                stepSize: 0.05
-                onValueChanged: {
-                    if (linkCheckbox.checked) {
-                        textScaleSlider.value = value
-                    }
-                }
+                Layout.fillWidth: true
+                from: 0.25; to: 2.0; stepSize: 0.05; value: 1.0
+                onValueChanged: { if (linkCheckbox.checked) textScaleSlider.value = value }
             }
             Controls.Label {
                 text: Math.round(catScaleSlider.value * 100) + "%"
-                Layout.minimumWidth: textMetrics2.width
-                Layout.minimumHeight: textMetrics2.height
+                Layout.minimumWidth: scaleLabelMetrics.width
                 horizontalAlignment: Text.AlignRight
-            }
-            TextMetrics {
-                id: textMetrics2
-                text: "200%"
             }
         }
 
@@ -79,58 +166,49 @@ KCM.SimpleKCM {
             Layout.fillWidth: true
             Kirigami.FormData.label: i18n("Text size")
             Controls.Slider {
-                Layout.fillWidth: true
                 id: textScaleSlider
-                from: 0.25
-                to: 2.0
-                value: 1.0
-                stepSize: 0.05
+                Layout.fillWidth: true
+                from: 0.25; to: 2.0; stepSize: 0.05; value: 1.0
                 enabled: !linkCheckbox.checked
-                onValueChanged: {
-                    if (linkCheckbox.checked) {
-                        catScaleSlider.value = value
-                    }
-                }
+                onValueChanged: { if (linkCheckbox.checked) catScaleSlider.value = value }
             }
             Controls.Label {
                 text: Math.round(textScaleSlider.value * 100) + "%"
-                Layout.minimumWidth: textMetrics3.width
-                Layout.minimumHeight: textMetrics3.height
+                Layout.minimumWidth: scaleLabelMetrics.width
                 horizontalAlignment: Text.AlignRight
             }
-            TextMetrics {
-                id: textMetrics3
-                text: "200%"
-            }
+        }
+
+        TextMetrics { id: scaleLabelMetrics; text: "200%" }
+
+        // ── Sensor ───────────────────────────────────────────────────────────
+
+        Kirigami.Separator {
+            Kirigami.FormData.label: i18n("Sensor")
+            Kirigami.FormData.isSection: true
+            Layout.fillWidth: true
         }
 
         RowLayout {
             Layout.fillWidth: true
             Kirigami.FormData.label: i18n("Idle threshold")
             Controls.Slider {
-                Layout.fillWidth: true
                 id: idleSlider
-                from: 0
-                to: 100
-                stepSize: 1
+                Layout.fillWidth: true
+                from: 0; to: 100; stepSize: 1
             }
             Controls.Label {
-                id: label
                 text: idleSlider.value + "%"
-                Layout.minimumWidth: textMetrics.width
-                Layout.minimumHeight: textMetrics.height
+                Layout.minimumWidth: idleMetrics.width
                 horizontalAlignment: Text.AlignRight
             }
-            TextMetrics {
-                id: textMetrics
-                text: "199%"
-            }
+            TextMetrics { id: idleMetrics; text: "100%" }
         }
 
         Controls.ComboBox {
-            Layout.fillWidth: true
-            Kirigami.FormData.label: i18n("Displaying items")
             id: typeBox
+            Layout.fillWidth: true
+            Kirigami.FormData.label: i18n("Display")
             model: [
                 i18n("Character and percentage"),
                 i18n("Character only"),
@@ -141,39 +219,98 @@ KCM.SimpleKCM {
         Controls.SpinBox {
             id: updateRateLimitSpinBox
             Layout.fillWidth: true
-            Kirigami.FormData.label: i18nd(
-                "KSysGuardSensorFaces",
-                "Minimum Time Between Updates:"
-            )
-            from: 0
-            to: 60000
-            stepSize: 500
-            editable: true
-            textFromValue: function (value, locale) {
-                if (value <= 0) {
-                    return i18nd("KSysGuardSensorFaces", "No Limit")
-                } else {
-                    var seconds = value / 1000
-                    if (seconds == 1) {
-                        return i18nd("KSysGuardSensorFaces", "1 second")
-                    } else {
-                        return i18nd(
-                            "KSysGuardSensorFaces",
-                            "%1 seconds",
-                            seconds
-                        )
-                    }
-                }
+            Kirigami.FormData.label: i18n("CPU update rate")
+            from: 0; to: 60000; stepSize: 500; editable: true
+            textFromValue: function(value, locale) {
+                if (value <= 0) return i18n("No limit")
+                var s = value / 1000
+                return (s === 1) ? i18n("1 second") : i18n("%1 seconds", s)
             }
-            valueFromText: function (value, locale) {
+            valueFromText: function(value, locale) {
                 var v = parseInt(value)
-                if (isNaN(v)) {
-                    return 0
-                } else {
-                    return v * 1000
-                }
+                return isNaN(v) ? 0 : v * 1000
+            }
+        }
+
+        // ── Angry Cat ────────────────────────────────────────────────────────
+
+        Kirigami.Separator {
+            Kirigami.FormData.label: i18n("Angry Cat")
+            Kirigami.FormData.isSection: true
+            Layout.fillWidth: true
+        }
+
+        Controls.CheckBox {
+            id: angryCheckbox
+            Kirigami.FormData.label: i18n("Enable")
+            text: i18n("Use angry frames when temperature reaches threshold")
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            enabled: angryCheckbox.checked
+            Kirigami.FormData.label: i18n("Threshold")
+
+            Controls.Slider {
+                id: angryTempSlider
+                Layout.fillWidth: true
+                from: 0; to: 120; stepSize: 1; value: 80
+            }
+            Controls.Label {
+                text: angryTempSlider.value === 0 ? i18n("always") : (angryTempSlider.value + "°C")
+                Layout.minimumWidth: angryTempMetrics.width
+                horizontalAlignment: Text.AlignRight
+            }
+            TextMetrics { id: angryTempMetrics; text: "120°C" }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            enabled: angryCheckbox.checked
+            Kirigami.FormData.label: i18n("Temp sensor")
+
+            Controls.TextField {
+                id: tempSensorField
+                Layout.fillWidth: true
+                placeholderText: "cpu/cpu0/temperature"
+            }
+        }
+
+        // Live readout — immediate feedback on whether the sensor ID is correct
+        Controls.Label {
+            enabled: angryCheckbox.checked
+            Kirigami.FormData.label: i18n("Reading")
+            text: previewSensor.value > 0
+                ? i18n("%1 °C", Math.round(previewSensor.value))
+                : i18n("No data — check sensor ID")
+            color: previewSensor.value > 0 ? Kirigami.Theme.positiveTextColor
+                                           : Kirigami.Theme.neutralTextColor
+        }
+
+        Controls.Label {
+            enabled: angryCheckbox.checked
+            Kirigami.FormData.label: " "
+            text: i18n("Find sensor IDs in KDE System Monitor › Sensors tab, right-click a sensor → Copy sensor name")
+            wrapMode: Text.WordWrap
+            Layout.maximumWidth: 340
+            font.italic: true
+            opacity: 0.6
+        }
+
+        Controls.SpinBox {
+            id: tempUpdateRateSpinBox
+            Layout.fillWidth: true
+            enabled: angryCheckbox.checked
+            Kirigami.FormData.label: i18n("Temp update rate")
+            from: 500; to: 60000; stepSize: 500; editable: true
+            textFromValue: function(value, locale) {
+                var s = value / 1000
+                return (s === 1) ? i18n("1 second") : i18n("%1 seconds", s)
+            }
+            valueFromText: function(text, locale) {
+                var v = parseFloat(text)
+                return isNaN(v) ? 5000 : Math.round(v * 1000)
             }
         }
     }
 }
-

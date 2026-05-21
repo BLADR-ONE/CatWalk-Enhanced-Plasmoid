@@ -9,42 +9,69 @@ import org.kde.plasma.plasmoid
 Item {
     id: compactRepresentation
 
-    // Raw values from sliders
     property real catScaleFactorRaw: plasmoid.configuration.catScale || 1.0
-    property real textScaleFactor: plasmoid.configuration.textScale || 1.0
+    property real textScaleFactor:   plasmoid.configuration.textScale || 1.0
+    property real catScaleFactor:    catScaleFactorRaw * 1.4
 
-    // Make cat 1.4× relative to text: cat 100% ≙ previous 140%
-    property real catScaleFactor: catScaleFactorRaw * 1.4
-
-    // Use vertical layout when "text below cat" is checked
     readonly property bool useVertical: plasmoid.configuration.textBelowCat
 
-    // Fixed intrinsic block sizes
-    property real catBlockWidth: (plasmoid.configuration.type !== 2) ? 32 * catScaleFactor : 0
+    readonly property bool showDivider: plasmoid.configuration.showDivider
+
+    // Spacing: -1 in config means auto (fill widget width)
+    readonly property bool spacingIsAuto: plasmoid.configuration.customSpacing < 0
+    readonly property real configuredSpacing: spacingIsAuto ? baseSpacing : plasmoid.configuration.customSpacing
+
+    // Precomputed image-path arrays — one set per animation state
+    readonly property var imagePaths: {
+        var p = [Qt.resolvedUrl("../images/my-idle-symbolic.svg")]
+        for (var i = 0; i < 5; i++)
+            p.push(Qt.resolvedUrl("../images/my-active-" + i + "-symbolic.svg"))
+        return p
+    }
+    readonly property var angryImagePaths: {
+        var p = [Qt.resolvedUrl("../images/my-idle-symbolic.svg")]  // no angry idle variant
+        for (var i = 0; i < 5; i++)
+            p.push(Qt.resolvedUrl("../images/my-active-" + i + "-symbolic_angry.svg"))
+        return p
+    }
+
+    // Angry when sensor >= threshold; threshold 0 = always angry (useful for testing)
+    readonly property bool isAngry: plasmoid.configuration.angryEnabled
+        && tempSensor.value >= plasmoid.configuration.angryTemp
+
+    // ── Block sizes ──────────────────────────────────────────────────────────
+
+    property real catBlockWidth:  (plasmoid.configuration.type !== 2) ? 32 * catScaleFactor : 0
     property real catBlockHeight: (plasmoid.configuration.type !== 2) ? 32 * catScaleFactor : 0
     property real textBlockWidth: (plasmoid.configuration.type !== 1) ? textMetrics.width + 16 * textScaleFactor : 0
-    property real textBlockHeight: (plasmoid.configuration.type !== 1) ? 32 * textScaleFactor : 0
+    property real textBlockHeight:(plasmoid.configuration.type !== 1) ? 32 * textScaleFactor : 0
+    // Horizontal layout: narrow column for a vertical bar; vertical layout: no column width needed
+    property real dividerBlockWidth:  (!useVertical && showDivider) ? 8 : 0
+    // Vertical layout: 1px row for the horizontal rule (rowSpacing provides all visual gap)
+    property real dividerBlockHeight: (useVertical && showDivider) ? 1 : 0
 
-    // Minimum size calculations depend on orientation
+    // Minimum gap per column-gap (2 gaps in horizontal 3-col layout)
     property real baseSpacing: 4
-    property real minSpacing: (catBlockWidth > 0 && textBlockWidth > 0) ? baseSpacing : 0
 
-    // In horizontal: width = cat + text + spacing, height = max(cat, text)
-    // In vertical: width = max(cat, text), height = cat + text + spacing
+    // ── Minimum / preferred sizes reported to the panel ──────────────────────
+
+    // Horizontal: cat + 2×gap + divider + text  (divider collapses to 0 when hidden)
     property real totalMinWidth: useVertical
-                                 ? Math.max(catBlockWidth, textBlockWidth)
-                                 : (catBlockWidth + textBlockWidth + minSpacing)
-    
-    property real totalMinHeight: useVertical
-                                  ? (catBlockHeight + textBlockHeight + minSpacing)
-                                  : Math.max(catBlockHeight, textBlockHeight)
+        ? Math.max(catBlockWidth, textBlockWidth)
+        : catBlockWidth + dividerBlockWidth + textBlockWidth + 2 * baseSpacing
 
-    Layout.minimumWidth: totalMinWidth
-    Layout.minimumHeight: totalMinHeight
-    Layout.preferredWidth: totalMinWidth
+    property real totalMinHeight: useVertical
+        ? catBlockHeight + dividerBlockHeight + textBlockHeight + configuredSpacing * (showDivider ? 2 : 1)
+        : Math.max(catBlockHeight, textBlockHeight)
+
+    Layout.minimumWidth:    totalMinWidth
+    Layout.minimumHeight:   totalMinHeight
+    Layout.preferredWidth:  totalMinWidth
     Layout.preferredHeight: totalMinHeight
-    Layout.maximumWidth: -1
-    Layout.maximumHeight: useVertical ? totalMinHeight : -1
+    Layout.maximumWidth:   -1
+    Layout.maximumHeight:   useVertical ? totalMinHeight : -1
+
+    // ── Layout detection (used by parent context) ─────────────────────────────
 
     enum LayoutType {
         HorizontalPanel,
@@ -59,118 +86,155 @@ Item {
     Binding on layoutForm {
         delayed: true
         value: {
-            if (root.inPanel) {
+            if (root.inPanel)
                 return root.isVertical ? CompactRepresentation.LayoutType.VerticalPanel
                                        : CompactRepresentation.LayoutType.HorizontalPanel
-            }
-            if (compactRepresentation.parent.width - svgItem.Layout.preferredWidth >= label.contentWidth) {
+            if (compactRepresentation.parent.width - catContainer.Layout.preferredWidth >= label.contentWidth)
                 return CompactRepresentation.LayoutType.HorizontalDesktop
-            }
-            if (compactRepresentation.parent.height - svgItem.Layout.preferredHeight >= label.contentHeight) {
+            if (compactRepresentation.parent.height - catContainer.Layout.preferredHeight >= label.contentHeight)
                 return CompactRepresentation.LayoutType.VerticalDesktop
-            }
             return CompactRepresentation.LayoutType.IconOnly
         }
     }
+
+    // ── Grid ─────────────────────────────────────────────────────────────────
+    //
+    // Horizontal: 3 columns — [cat(0) | divider(1) | text(2)] or swapped.
+    //   columnSpacing = configuredSpacing when fixed; fills available width when auto.
+    //   In fixed mode grid.width = natural content width; anchors.centerIn handles centering.
+    //
+    // Vertical: 1 column, 2 or 3 rows (cat, [divider,] text). rowSpacing = configuredSpacing.
 
     GridLayout {
         id: grid
         anchors.centerIn: parent
 
-        width: compactRepresentation.width
+        // In fixed-spacing mode, shrink to natural content size so centering handles the rest
+        width: useVertical ? compactRepresentation.width
+             : (spacingIsAuto ? compactRepresentation.width
+                              : catBlockWidth + dividerBlockWidth + textBlockWidth + 2 * configuredSpacing)
         height: compactRepresentation.height
 
-        // Dynamic spacing only in horizontal mode
-        readonly property real extraSpace: useVertical 
-                                          ? 0 
-                                          : Math.max(0, width - totalMinWidth)
+        columns: useVertical ? 1 : 3
+        // 3 rows in vertical when divider is shown (cat, divider, text); 2 rows otherwise
+        rows:    useVertical ? (showDivider ? 3 : 2) : 1
 
-        // Fixed minimal spacing in vertical, dynamic in horizontal
-        rowSpacing: baseSpacing
-        columnSpacing: useVertical ? 0 : (minSpacing + extraSpace)
+        // Auto: spread the available room equally across the 2 column gaps.
+        // Fixed: use configuredSpacing directly.
+        columnSpacing: {
+            if (useVertical) return 0
+            if (spacingIsAuto)
+                return Math.max(baseSpacing,
+                    (compactRepresentation.width - catBlockWidth - dividerBlockWidth - textBlockWidth) / 2)
+            return configuredSpacing
+        }
+        // In vertical mode, apply the same configured spacing to row gaps as horizontal uses for columns
+        rowSpacing: useVertical ? configuredSpacing : baseSpacing
 
-        // Don't use flow when we have explicit row/column positioning
-        columns: useVertical ? 1 : 2
-        rows: useVertical ? 2 : 1
+        // ── Cat ──────────────────────────────────────────────────────────────
 
-        KSvg.SvgItem {
-            property int sourceIndex: 0
-            id: svgItem
-            opacity: 1
+        Item {
+            id: catContainer
+            visible: plasmoid.configuration.type !== 2
 
-            // Explicit positioning based on orientation and swap
-            Layout.row: {
-                if (useVertical) {
-                    return plasmoid.configuration.swapOrder ? 1 : 0
-                } else {
-                    return 0
-                }
+            // Horizontal: col 0 normal, col 2 swapped.
+            // Vertical with divider: row 0/2; without divider: row 0/1.
+            Layout.column: useVertical ? 0 : (plasmoid.configuration.swapOrder ? 2 : 0)
+            Layout.row: useVertical
+                ? (showDivider ? (plasmoid.configuration.swapOrder ? 2 : 0)
+                               : (plasmoid.configuration.swapOrder ? 1 : 0))
+                : 0
+            Layout.alignment:      Qt.AlignVCenter | Qt.AlignHCenter
+            Layout.preferredWidth:  32 * catScaleFactor
+            Layout.preferredHeight: 32 * catScaleFactor
+            Layout.minimumWidth:    32 * catScaleFactor
+            Layout.minimumHeight:   32 * catScaleFactor
+            Layout.maximumWidth:    32 * catScaleFactor
+            Layout.maximumHeight:   32 * catScaleFactor
+
+            KSvg.SvgItem {
+                id: svgItem
+                property int sourceIndex: 0
+                anchors.fill: parent
+                imagePath: imagePaths[0]
             }
-            
-            Layout.column: {
-                if (useVertical) {
-                    return 0
-                } else {
-                    return plasmoid.configuration.swapOrder ? 1 : 0
-                }
-            }
+        }
 
+        // ── Divider ──────────────────────────────────────────────────────────
+        // Horizontal layout: 1px-wide vertical bar centered in narrow column (like |).
+        // Vertical layout: 1px-tall short horizontal dash centered in the row (like —).
+
+        Item {
+            id: dividerContainer
+            visible: plasmoid.configuration.showDivider
+
+            Layout.column: useVertical ? 0 : 1
+            Layout.row:    useVertical ? 1 : 0
             Layout.alignment: Qt.AlignVCenter | Qt.AlignHCenter
 
-            Layout.preferredWidth: 32 * catScaleFactor
-            Layout.preferredHeight: 32 * catScaleFactor
-            Layout.minimumWidth: 32 * catScaleFactor
-            Layout.minimumHeight: 32 * catScaleFactor
-            Layout.maximumWidth: 32 * catScaleFactor
-            Layout.maximumHeight: 32 * catScaleFactor
+            // Horizontal mode: narrow fixed-width column; vertical mode: full column width, fixed height
+            Layout.preferredWidth:  useVertical ? Math.max(catBlockWidth, textBlockWidth) : dividerBlockWidth
+            Layout.minimumWidth:    0
+            Layout.maximumWidth:    useVertical ? Math.max(catBlockWidth, textBlockWidth) : dividerBlockWidth
+            Layout.preferredHeight: useVertical ? dividerBlockHeight : Math.max(catBlockHeight, textBlockHeight)
+            Layout.minimumHeight:   0
+            Layout.maximumHeight:   useVertical ? dividerBlockHeight : Math.max(catBlockHeight, textBlockHeight)
 
-            visible: plasmoid.configuration.type !== 2
-            imagePath: Qt.resolvedUrl("../images/my-idle-symbolic.svg")
+            Rectangle {
+                anchors.centerIn: parent
+                // Horizontal layout: thin vertical bar spanning full cell height
+                // Vertical layout: short horizontal dash ~24px wide
+                width:  useVertical ? 24 : 1
+                height: useVertical ? 1 : parent.height
+                color:  Kirigami.Theme.textColor
+                opacity: 0.45
+            }
         }
+
+        // ── Text ─────────────────────────────────────────────────────────────
 
         PlasmaComponents3.Label {
             id: label
             text: totalSensor.formattedValue
             visible: plasmoid.configuration.type !== 1
 
-            // Opposite row/column of cat
-            Layout.row: {
-                if (useVertical) {
-                    return plasmoid.configuration.swapOrder ? 0 : 1
-                } else {
-                    return 0
-                }
-            }
-            
-            Layout.column: {
-                if (useVertical) {
-                    return 0
-                } else {
-                    return plasmoid.configuration.swapOrder ? 0 : 1
-                }
-            }
-
-            Layout.alignment: Qt.AlignVCenter | Qt.AlignHCenter
-
-            Layout.preferredWidth: textMetrics.width + 16 * textScaleFactor
+            Layout.column: useVertical ? 0 : (plasmoid.configuration.swapOrder ? 0 : 2)
+            Layout.row: useVertical
+                ? (showDivider ? (plasmoid.configuration.swapOrder ? 0 : 2)
+                               : (plasmoid.configuration.swapOrder ? 0 : 1))
+                : 0
+            Layout.alignment:      Qt.AlignVCenter | Qt.AlignHCenter
+            Layout.preferredWidth:  textMetrics.width + 16 * textScaleFactor
             Layout.preferredHeight: 32 * textScaleFactor
-            Layout.minimumWidth: textMetrics.width + 16 * textScaleFactor
-            Layout.minimumHeight: 32 * textScaleFactor
-            Layout.maximumWidth: textMetrics.width + 16 * textScaleFactor
-            Layout.maximumHeight: 32 * textScaleFactor
+            Layout.minimumWidth:    textMetrics.width + 16 * textScaleFactor
+            Layout.minimumHeight:   32 * textScaleFactor
+            Layout.maximumWidth:    textMetrics.width + 16 * textScaleFactor
+            Layout.maximumHeight:   32 * textScaleFactor
 
-            font.pixelSize: 32 * textScaleFactor * 0.8
+            font.pixelSize:      32 * textScaleFactor * 0.8
             horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            renderType: Text.NativeRendering
+            verticalAlignment:   Text.AlignVCenter
+            renderType:          Text.NativeRendering
+
+            // Colour shifts with CPU load for at-a-glance feedback
+            color: {
+                var v = totalSensor.value
+                if (v >= 85) return Kirigami.Theme.negativeTextColor
+                if (v >= 60) return Kirigami.Theme.neutralTextColor
+                return Kirigami.Theme.textColor
+            }
+            Behavior on color { ColorAnimation { duration: 400 } }
         }
 
         TextMetrics {
             id: textMetrics
             font.pixelSize: label.font.pixelSize
-            text: "100,0%"
+            text: "100.0%"
         }
+
     }
+
+    // ── Sensors ──────────────────────────────────────────────────────────────
 
     Sensors.Sensor {
         id: totalSensor
@@ -178,20 +242,27 @@ Item {
         updateRateLimit: plasmoid.configuration.updateRateLimit
     }
 
+    Sensors.Sensor {
+        id: tempSensor
+        sensorId: plasmoid.configuration.tempSensorId
+        updateRateLimit: plasmoid.configuration.tempUpdateRate
+    }
+
+    // ── Animation timer ───────────────────────────────────────────────────────
+    // Picks normal or angry asset set; actual cycle logic is identical.
+
     Timer {
         id: switchTimer
         repeat: true
         running: true
         interval: Math.ceil(5000 / Math.sqrt(totalSensor.value + 35) - 400)
         onTriggered: {
-            if (svgItem.sourceIndex == 5) {
-                svgItem.sourceIndex = 0
-            }
+            if (svgItem.sourceIndex >= 5) svgItem.sourceIndex = 0
+            var paths = isAngry ? angryImagePaths : imagePaths
             svgItem.imagePath = (totalSensor.value < plasmoid.configuration.idle)
-                ? Qt.resolvedUrl("../images/my-idle-symbolic.svg")
-                : Qt.resolvedUrl("../images/my-active-" + svgItem.sourceIndex + "-symbolic.svg")
-            svgItem.sourceIndex += 1
+                ? paths[0]
+                : paths[svgItem.sourceIndex + 1]
+            svgItem.sourceIndex++
         }
     }
 }
-

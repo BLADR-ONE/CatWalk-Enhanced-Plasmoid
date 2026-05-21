@@ -15,13 +15,13 @@
 
 ## 🚀 Installation
 
-### 🖥️ Plasma 6 (Recommended)
+### 🖥️ Plasma 6
 ```bash
-# Download release ZIP & install
-plasmapkg2 -i org.kde.plasma.catwalkenhanced.zip
+# Install from ZIP
+kpackagetool6 --type Plasma/Applet --install org.kde.plasma.catwalkEnhanced.zip
 
-# Or from extracted folder
-plasmapkg2 -i org.kde.plasma.catwalkenhanced/
+# Upgrade an existing install
+kpackagetool6 --type Plasma/Applet --upgrade org.kde.plasma.catwalkEnhanced.zip
 ```
 
 ### 🔄 Restart Plasma (if needed)
@@ -31,7 +31,7 @@ kquitapp6 plasmashell && kstart6 plasmashell
 
 ### 🗑️ Uninstall
 ```bash
-plasmapkg2 -r org.kde.plasma.catwalkenhanced
+kpackagetool6 --type Plasma/Applet --remove org.kde.plasma.catwalkEnhanced
 ```
 
 ## ⚙️ Configuration
@@ -60,7 +60,7 @@ plasmapkg2 -r org.kde.plasma.catwalkenhanced
 
 ## 📦 Plasma 6 Compatible ✓
 ```
-Id: org.kde.plasma.catwalkenhanced
+Id: org.kde.plasma.catwalkEnhanced
 Version: 1.0
 API: Plasma 6+
 Provides: org.kde.plasma.systemmonitor
