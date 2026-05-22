@@ -53,15 +53,20 @@ Item {
     readonly property real maxBlockWidth: Math.max(catBlockWidth, textBlockWidth)
     readonly property real dividerLength: Math.round(32 * dividerScaleFactor * 0.8)
 
+    // Cat-divider symmetry padding. Stacked (text-below-cat) layout uses a fixed,
+    // empirically-found value; side-by-side layout uses the config knob for tuning.
+    readonly property int stackedCatPad: -13
+    readonly property int sideCatPad: !useVertical ? plasmoid.configuration.catExtraPadding : 0
+
     // ── Minimum / preferred sizes reported to the panel ──────────────────────
 
     // Horizontal: cat + 2×gap + divider + text  (divider collapses to 0 when hidden)
     property real totalMinWidth: useVertical
         ? Math.max(catBlockWidth, textBlockWidth)
-        : catBlockWidth + dividerBlockWidth + textBlockWidth + 2 * baseSpacing
+        : catBlockWidth + dividerBlockWidth + textBlockWidth + 2 * baseSpacing + sideCatPad
 
     property real totalMinHeight: useVertical
-        ? catBlockHeight + plasmoid.configuration.catExtraPadding + dividerBlockHeight + textBlockHeight
+        ? catBlockHeight + stackedCatPad + dividerBlockHeight + textBlockHeight
           + configuredSpacing * (showDivider ? 2 : 1)
         : Math.max(catBlockHeight, textBlockHeight)
 
@@ -116,7 +121,7 @@ Item {
         // In fixed-spacing mode, shrink to natural content size so centering handles the rest
         width: useVertical ? compactRepresentation.width
              : (spacingIsAuto ? compactRepresentation.width
-                              : catBlockWidth + dividerBlockWidth + textBlockWidth + 2 * configuredSpacing)
+                              : catBlockWidth + dividerBlockWidth + textBlockWidth + 2 * configuredSpacing + sideCatPad)
         height: compactRepresentation.height
 
         columns: useVertical ? 1 : 3
@@ -129,7 +134,7 @@ Item {
             if (useVertical) return 0
             if (spacingIsAuto)
                 return Math.max(baseSpacing,
-                    (compactRepresentation.width - catBlockWidth - dividerBlockWidth - textBlockWidth) / 2)
+                    (compactRepresentation.width - catBlockWidth - dividerBlockWidth - textBlockWidth - sideCatPad) / 2)
             return configuredSpacing
         }
         // Horizontal: fixed baseSpacing between the single row's items.
@@ -140,7 +145,7 @@ Item {
             if (spacingIsAuto) {
                 var numGaps = showDivider ? 2 : 1
                 var available = compactRepresentation.height
-                    - catBlockHeight - plasmoid.configuration.catExtraPadding
+                    - catBlockHeight - stackedCatPad
                     - dividerBlockHeight - textBlockHeight
                 return Math.max(baseSpacing, available / numGaps)
             }
@@ -167,10 +172,13 @@ Item {
             Layout.minimumHeight:   32 * catScaleFactor
             Layout.maximumWidth:    32 * catScaleFactor
             Layout.maximumHeight:   32 * catScaleFactor
-            // Extra margin between cat and divider in stacked layout — for symmetry testing.
-            // Compensates for the text label's implicit top/bottom font metrics padding.
-            Layout.topMargin:    (useVertical &&  plasmoid.configuration.swapOrder) ? plasmoid.configuration.catExtraPadding : 0
-            Layout.bottomMargin: (useVertical && !plasmoid.configuration.swapOrder) ? plasmoid.configuration.catExtraPadding : 0
+            // Margin on the cat's divider-facing edge, compensating for the text label's
+            // implicit font-metrics padding. Stacked layout: fixed stackedCatPad.
+            // Side-by-side layout: config-driven sideCatPad (tuning knob).
+            Layout.topMargin:    (useVertical &&  plasmoid.configuration.swapOrder) ? stackedCatPad : 0
+            Layout.bottomMargin: (useVertical && !plasmoid.configuration.swapOrder) ? stackedCatPad : 0
+            Layout.leftMargin:   (!useVertical &&  plasmoid.configuration.swapOrder) ? sideCatPad : 0
+            Layout.rightMargin:  (!useVertical && !plasmoid.configuration.swapOrder) ? sideCatPad : 0
 
             KSvg.SvgItem {
                 id: svgItem

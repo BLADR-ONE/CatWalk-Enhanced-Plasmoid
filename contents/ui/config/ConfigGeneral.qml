@@ -92,6 +92,7 @@ KCM.SimpleKCM {
             id: spacingAutoRadio
             Kirigami.FormData.label: i18n("Mode")
             text: i18n("Automatic — fill available space")
+            checked: true
             onToggled: if (checked) { spacingMode = 0; cfg_customSpacing = -1 }
         }
 
@@ -220,13 +221,14 @@ KCM.SimpleKCM {
 
         RowLayout {
             Layout.fillWidth: true
+            enabled: !textBelowCatCheckBox.checked
             Kirigami.FormData.label: i18n("Cat edge padding")
 
             Controls.SpinBox {
                 id: catExtraPaddingSpinBox
                 from: -50; to: 50; stepSize: 1; editable: true
             }
-            Controls.Label { text: i18n("px (stacked layout only — for symmetry testing)") }
+            Controls.Label { text: i18n("px (side-by-side layout only — for symmetry testing)") }
         }
 
         // ── Sensor ───────────────────────────────────────────────────────────
