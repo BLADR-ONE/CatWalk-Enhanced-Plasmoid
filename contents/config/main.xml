@@ -51,7 +51,7 @@
             <default>1.0</default>
         </entry>
         <entry name="dividerThickness" type="Int">
-            <default>1</default>
+            <default>2</default>
         </entry>
     </group>
 </kcfg>

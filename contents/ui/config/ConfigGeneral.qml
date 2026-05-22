@@ -45,7 +45,7 @@ KCM.SimpleKCM {
     property string cfg_tempSensorIdDefault:     "cpu/cpu0/temperature"
     property int    cfg_tempUpdateRateDefault:   5000
     property real   cfg_dividerScaleDefault:     1.0
-    property int    cfg_dividerThicknessDefault: 1
+    property int    cfg_dividerThicknessDefault: 2
 
     // Spacing UI mode: 0=auto, 1=slider, 2=manual. Not persisted — initialised from cfg_customSpacing.
     property int spacingMode: 0
@@ -71,22 +71,14 @@ KCM.SimpleKCM {
 
         // ── Layout ───────────────────────────────────────────────────────────
 
-        Controls.CheckBox {
-            id: linkCheckbox
-            Kirigami.FormData.label: i18n("Link sizes")
-            text: i18n("Keep cat and text same size")
-            checked: true
-            onCheckedChanged: {
-                if (checked) {
-                    textScaleSlider.value = catScaleSlider.value
-                    dividerScaleSlider.value = catScaleSlider.value
-                }
-            }
+        Kirigami.Separator {
+            Kirigami.FormData.label: i18n("Layout")
+            Kirigami.FormData.isSection: true
+            Layout.fillWidth: true
         }
 
         Controls.CheckBox {
             id: textBelowCatCheckBox
-            Kirigami.FormData.label: i18n("Layout")
             text: i18n("Show text below cat (instead of side by side)")
         }
 
@@ -98,6 +90,17 @@ KCM.SimpleKCM {
         Controls.CheckBox {
             id: showDividerCheckBox
             text: i18n("Show divider between cat and text")
+        }
+
+        Controls.ComboBox {
+            id: typeBox
+            Layout.fillWidth: true
+            Kirigami.FormData.label: i18n("Display")
+            model: [
+                i18n("Character and percentage"),
+                i18n("Character only"),
+                i18n("Percentage only")
+            ]
         }
 
         // ── Spacing ──────────────────────────────────────────────────────────
@@ -176,6 +179,19 @@ KCM.SimpleKCM {
             Kirigami.FormData.label: i18n("Sizing")
             Kirigami.FormData.isSection: true
             Layout.fillWidth: true
+        }
+
+        Controls.CheckBox {
+            id: linkCheckbox
+            Kirigami.FormData.label: i18n("Link sizes")
+            text: i18n("Keep cat, text and divider the same size")
+            checked: true
+            onCheckedChanged: {
+                if (checked) {
+                    textScaleSlider.value = catScaleSlider.value
+                    dividerScaleSlider.value = catScaleSlider.value
+                }
+            }
         }
 
         RowLayout {
@@ -264,17 +280,6 @@ KCM.SimpleKCM {
                 horizontalAlignment: Text.AlignRight
             }
             TextMetrics { id: idleMetrics; text: "100%" }
-        }
-
-        Controls.ComboBox {
-            id: typeBox
-            Layout.fillWidth: true
-            Kirigami.FormData.label: i18n("Display")
-            model: [
-                i18n("Character and percentage"),
-                i18n("Character only"),
-                i18n("Percentage only")
-            ]
         }
 
         Controls.SpinBox {
