@@ -14,9 +14,9 @@ Item {
     property real catScaleFactor:      catScaleFactorRaw * 1.4
     readonly property real dividerScaleFactor: plasmoid.configuration.dividerScale || 1.0
 
-    readonly property bool useVertical: plasmoid.configuration.textBelowCat
+    readonly property bool useVertical: plasmoid.configuration.textBelowCat === true
 
-    readonly property bool showDivider: plasmoid.configuration.showDivider
+    readonly property bool showDivider: plasmoid.configuration.showDivider === true
 
     // Spacing: -1 in config means auto (fill widget width)
     readonly property bool spacingIsAuto: plasmoid.configuration.customSpacing < 0
@@ -37,7 +37,7 @@ Item {
     }
 
     // Angry when sensor >= threshold; threshold 0 = always angry (useful for testing)
-    readonly property bool isAngry: plasmoid.configuration.angryEnabled
+    readonly property bool isAngry: (plasmoid.configuration.angryEnabled === true)
         && tempSensor.value >= plasmoid.configuration.angryTemp
 
     // ── Block sizes ──────────────────────────────────────────────────────────
@@ -53,10 +53,10 @@ Item {
     readonly property real maxBlockWidth: Math.max(catBlockWidth, textBlockWidth)
     readonly property real dividerLength: Math.round(32 * dividerScaleFactor * 0.8)
 
-    // Cat-divider symmetry padding. Stacked (text-below-cat) layout uses a fixed,
-    // empirically-found value; side-by-side layout uses the config knob for tuning.
-    readonly property int stackedCatPad: -13
-    readonly property int sideCatPad: !useVertical ? plasmoid.configuration.catExtraPadding : 0
+    // Cat-divider symmetry padding — empirically-found fixed values that compensate
+    // for the text label's implicit font-metrics padding so the divider sits centered.
+    readonly property int stackedCatPad: -13   // text-below-cat layout
+    readonly property int sideCatPad: !useVertical ? 22 : 0   // side-by-side layout
 
     // ── Minimum / preferred sizes reported to the panel ──────────────────────
 
@@ -173,8 +173,7 @@ Item {
             Layout.maximumWidth:    32 * catScaleFactor
             Layout.maximumHeight:   32 * catScaleFactor
             // Margin on the cat's divider-facing edge, compensating for the text label's
-            // implicit font-metrics padding. Stacked layout: fixed stackedCatPad.
-            // Side-by-side layout: config-driven sideCatPad (tuning knob).
+            // implicit font-metrics padding (stackedCatPad / sideCatPad).
             Layout.topMargin:    (useVertical &&  plasmoid.configuration.swapOrder) ? stackedCatPad : 0
             Layout.bottomMargin: (useVertical && !plasmoid.configuration.swapOrder) ? stackedCatPad : 0
             Layout.leftMargin:   (!useVertical &&  plasmoid.configuration.swapOrder) ? sideCatPad : 0
@@ -194,7 +193,7 @@ Item {
 
         Item {
             id: dividerContainer
-            visible: plasmoid.configuration.showDivider
+            visible: showDivider
 
             Layout.column: useVertical ? 0 : 1
             Layout.row:    useVertical ? 1 : 0

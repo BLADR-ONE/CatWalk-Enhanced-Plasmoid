@@ -19,13 +19,33 @@ KCM.SimpleKCM {
     property alias cfg_angryTemp:       angryTempSlider.value
     property alias cfg_tempSensorId:    tempSensorField.text
     property alias cfg_tempUpdateRate:  tempUpdateRateSpinBox.value
-    property alias cfg_catExtraPadding:  catExtraPaddingSpinBox.value
     property alias cfg_dividerScale:     dividerScaleSlider.value
     property alias cfg_dividerThickness: dividerThicknessSpinBox.value
 
     // customSpacing: -1 = auto, ≥0 = fixed px. Cannot use property alias because
     // the value toggles between -1 and a slider value — no single control maps to it.
     property int cfg_customSpacing: -1
+
+    // The config dialog assigns a cfg_<key>Default for EVERY schema key when the page loads
+    // (used for the reset-to-default button and the "modified" indicator). They are NOT
+    // auto-created on the page object, so each must be declared here or the framework warns
+    // "does not have a property called cfg_<key>Default". Values mirror config/main.xml.
+    property int    cfg_idleDefault:             0
+    property int    cfg_typeDefault:             0
+    property int    cfg_updateRateLimitDefault:  1000
+    property real   cfg_catScaleDefault:         1.0
+    property real   cfg_textScaleDefault:        1.0
+    property bool   cfg_linkScalesDefault:       true
+    property bool   cfg_textBelowCatDefault:     false
+    property bool   cfg_swapOrderDefault:        false
+    property bool   cfg_showDividerDefault:      false
+    property int    cfg_customSpacingDefault:    -1
+    property bool   cfg_angryEnabledDefault:     true
+    property int    cfg_angryTempDefault:        80
+    property string cfg_tempSensorIdDefault:     "cpu/cpu0/temperature"
+    property int    cfg_tempUpdateRateDefault:   5000
+    property real   cfg_dividerScaleDefault:     1.0
+    property int    cfg_dividerThicknessDefault: 1
 
     // Spacing UI mode: 0=auto, 1=slider, 2=manual. Not persisted — initialised from cfg_customSpacing.
     property int spacingMode: 0
@@ -136,10 +156,13 @@ KCM.SimpleKCM {
             Controls.TextField {
                 id: spacingManualField
                 Layout.fillWidth: true
-                text: cfg_customSpacing >= 0 ? cfg_customSpacing.toString() : "8"
                 inputMethodHints: Qt.ImhDigitsOnly
                 validator: IntValidator { bottom: 0; top: 500 }
-                onTextChanged: {
+                // No declarative `text:` binding on a value we also write back to — that
+                // forms a binding loop. Seed imperatively, and only react to user edits.
+                Component.onCompleted: text = cfg_customSpacing >= 0 ? cfg_customSpacing.toString() : "8"
+                onVisibleChanged: if (visible) text = cfg_customSpacing >= 0 ? cfg_customSpacing.toString() : "8"
+                onTextEdited: {
                     var v = parseInt(text)
                     if (!isNaN(v) && v >= 0 && v <= 500) cfg_customSpacing = v
                 }
@@ -217,18 +240,6 @@ KCM.SimpleKCM {
                 from: 1; to: 10; stepSize: 1; editable: true
             }
             Controls.Label { text: i18n("px") }
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            enabled: !textBelowCatCheckBox.checked
-            Kirigami.FormData.label: i18n("Cat edge padding")
-
-            Controls.SpinBox {
-                id: catExtraPaddingSpinBox
-                from: -50; to: 50; stepSize: 1; editable: true
-            }
-            Controls.Label { text: i18n("px (side-by-side layout only — for symmetry testing)") }
         }
 
         // ── Sensor ───────────────────────────────────────────────────────────

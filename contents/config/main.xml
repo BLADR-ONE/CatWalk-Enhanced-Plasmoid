@@ -47,9 +47,6 @@
         <entry name="tempUpdateRate" type="Int">
             <default>5000</default>
         </entry>
-        <entry name="catExtraPadding" type="Int">
-            <default>0</default>
-        </entry>
         <entry name="dividerScale" type="Double">
             <default>1.0</default>
         </entry>
