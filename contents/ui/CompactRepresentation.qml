@@ -9,26 +9,54 @@ import org.kde.plasma.plasmoid
 Item {
     id: compactRepresentation
 
-    property real catScaleFactorRaw:   plasmoid.configuration.catScale || 1.0
-    property real textScaleFactor:     plasmoid.configuration.textScale || 1.0
+    // ── Scale factors ──────────────────────────────────────────────────────────
+    property real catScaleFactorRaw:   plasmoid.configuration.catScale  || 1.0
+    property real textScaleFactor:     plasmoid.configuration.textScale  || 1.0
+    property real tempScaleFactor:     plasmoid.configuration.tempScale  || 1.0
     property real catScaleFactor:      catScaleFactorRaw * 1.4
     readonly property real dividerScaleFactor: plasmoid.configuration.dividerScale || 1.0
 
-    readonly property bool useVertical: plasmoid.configuration.textBelowCat === true
-
-    readonly property bool showDivider: plasmoid.configuration.showDivider === true
-
-    // Cached config reads — referenced many times in layout bindings, so resolve the
-    // property-map lookup once instead of on every binding re-evaluation.
+    // ── Cached config reads (resolve the property-map lookup once) ───────────────
+    readonly property bool useVertical:      plasmoid.configuration.textBelowCat === true
+    readonly property bool showDivider:      plasmoid.configuration.showDivider === true
     readonly property bool swapOrder:        plasmoid.configuration.swapOrder === true
     readonly property int  displayType:      plasmoid.configuration.type
     readonly property int  dividerThickness: plasmoid.configuration.dividerThickness
+    readonly property int  tempUnit:         plasmoid.configuration.tempUnit
 
-    // Spacing: -1 in config means auto (fill widget width)
+    // Which elements are shown. displayType: 0=cat+cpu, 1=cat only, 2=cpu only.
+    readonly property bool showCat:  displayType !== 2
+    readonly property bool showCpu:  displayType !== 1
+    readonly property bool showTemp: plasmoid.configuration.showTemp === true
+
+    // ── Spacing ─────────────────────────────────────────────────────────────────
     readonly property bool spacingIsAuto: plasmoid.configuration.customSpacing < 0
     readonly property real configuredSpacing: spacingIsAuto ? baseSpacing : plasmoid.configuration.customSpacing
+    property real baseSpacing: 4
 
-    // Precomputed image-path arrays — one set per animation state
+    // ── Visual sequence: visible items (cat, cpu, temp) in order, dividers between ─
+    // "d1"/"d2" mark the dividers after the 1st/2nd item. Reversed when swapOrder.
+    readonly property int visibleItemCount:    (showCat?1:0) + (showCpu?1:0) + (showTemp?1:0)
+    readonly property int visibleDividerCount: showDivider ? Math.max(0, visibleItemCount - 1) : 0
+    readonly property var sequence: {
+        var items = []
+        if (showCat)  items.push("cat")
+        if (showCpu)  items.push("cpu")
+        if (showTemp) items.push("temp")
+        if (swapOrder) items.reverse()
+        var seq = []
+        for (var i = 0; i < items.length; i++) {
+            if (i > 0 && showDivider) seq.push("d" + i)
+            seq.push(items[i])
+        }
+        return seq
+    }
+    readonly property int cellCount:     sequence.length
+    readonly property int gapCount:      Math.max(1, cellCount - 1)   // divisor guard for auto spacing
+    readonly property int gapsForSizing: Math.max(0, cellCount - 1)   // real gap count for size reporting
+
+    // ── Cat animation ───────────────────────────────────────────────────────────
+    // The timer drives currentCatImage; the cat item just binds its imagePath to it.
     readonly property var imagePaths: {
         var p = [Qt.resolvedUrl("../images/my-idle-symbolic.svg")]
         for (var i = 0; i < 5; i++)
@@ -41,53 +69,71 @@ Item {
             p.push(Qt.resolvedUrl("../images/my-active-" + i + "-symbolic_angry.svg"))
         return p
     }
+    property int catFrameIndex: 0
+    property string currentCatImage: imagePaths[0]
 
     // Angry when sensor >= threshold; threshold 0 = always angry (useful for testing)
     readonly property bool isAngry: (plasmoid.configuration.angryEnabled === true)
         && tempSensor.value >= plasmoid.configuration.angryTemp
 
-    // ── Block sizes ──────────────────────────────────────────────────────────
+    // ── Temperature formatting (sensor value is °C) ─────────────────────────────
+    function formatTemp(c) {
+        if (tempUnit === 1) return Math.round(c * 9 / 5 + 32) + "°F"
+        if (tempUnit === 2) return Math.round(c + 273.15) + " K"
+        return Math.round(c) + "°C"
+    }
+    readonly property string tempText: (tempSensor.value > 0) ? formatTemp(tempSensor.value) : "—"
 
-    readonly property real catBox:       32 * catScaleFactor                      // cat cell edge (square)
-    readonly property real textBoxWidth: textMetrics.width + 16 * textScaleFactor  // text cell width
+    // ── Element box sizes ───────────────────────────────────────────────────────
+    readonly property real catBox: 32 * catScaleFactor
 
-    property real catBlockWidth:  (displayType !== 2) ? catBox : 0
-    property real catBlockHeight: (displayType !== 2) ? catBox : 0
-    property real textBlockWidth: (displayType !== 1) ? textBoxWidth : 0
-    // Vertical layout shrinks the text cell to the glyphs' ink height so the stacked text has
-    // no empty space above/below; horizontal keeps the full 32px cell height.
-    property real textBlockHeight: (displayType === 1) ? 0
-        : (useVertical ? (textInkHeight || 32 * textScaleFactor)
-                       : 32 * textScaleFactor)
-    property real dividerBlockWidth:  (!useVertical && showDivider) ? (dividerThickness + 6) : 0
-    property real dividerBlockHeight: (useVertical && showDivider) ? dividerThickness : 0
+    // CPU text box: fixed-width metric ("100.0%") avoids jitter as the value changes.
+    readonly property real cpuBoxWidth:     cpuMetrics.width + 16 * textScaleFactor
+    readonly property real cpuInkHeight:    Math.ceil(cpuMetrics.tightBoundingRect.height)
+    readonly property real cpuVerticalTrim: Math.max(0, (cpuLabel.contentHeight - cpuInkHeight) / 2)
+    readonly property real cpuBlockHeight:  useVertical ? (cpuInkHeight  || 32 * textScaleFactor) : 32 * textScaleFactor
 
-    property real baseSpacing: 4
-    readonly property real maxBlockWidth:  Math.max(catBlockWidth, textBlockWidth)
-    readonly property real maxBlockHeight: Math.max(catBlockHeight, textBlockHeight)
+    // Temp text box: tracks the actual string (temperature changes slowly → no jitter).
+    readonly property real tempBoxWidth:     tempMetrics.width + 16 * tempScaleFactor
+    readonly property real tempInkHeight:    Math.ceil(tempMetrics.tightBoundingRect.height)
+    readonly property real tempVerticalTrim: Math.max(0, (tempLabel.contentHeight - tempInkHeight) / 2)
+    readonly property real tempBlockHeight:  useVertical ? (tempInkHeight || 32 * tempScaleFactor) : 32 * tempScaleFactor
+
+    // Per-element footprint (0 when hidden)
+    readonly property real catW:  showCat  ? catBox         : 0
+    readonly property real catH:  showCat  ? catBox         : 0
+    readonly property real cpuW:  showCpu  ? cpuBoxWidth    : 0
+    readonly property real cpuH:  showCpu  ? cpuBlockHeight : 0
+    readonly property real tempW: showTemp ? tempBoxWidth   : 0
+    readonly property real tempH: showTemp ? tempBlockHeight: 0
+
+    readonly property real maxItemWidth:  Math.max(catW, cpuW, tempW)
+    readonly property real maxItemHeight: Math.max(catH, cpuH, tempH)
+
+    // Divider cell sizes
+    readonly property real dividerBlockWidth:  (!useVertical && showDivider) ? (dividerThickness + 6) : 0
+    readonly property real dividerBlockHeight: (useVertical && showDivider) ? dividerThickness : 0
     readonly property real dividerLength: Math.round(32 * dividerScaleFactor * 0.8)
 
-    // Cat-divider symmetry padding — empirically-found fixed values that compensate
-    // for any residual asymmetry so the divider sits centred.
-    readonly property int stackedCatPad: 0    // text-below-cat layout (fine-tune if off-centre)
-    readonly property int sideCatPad: !useVertical ? 22 : 0   // side-by-side layout
+    // ── Cat-divider symmetry pads (empirical) ───────────────────────────────────
+    // Compensate for the cat SVG's internal whitespace so the divider sits centred
+    // against the cat's divider-facing edge. Only applies when the cat actually has a
+    // divider neighbour (the cat is always at an end of the line, so any divider is adjacent).
+    readonly property bool catAdjacentToDivider: showCat && visibleDividerCount > 0
+    readonly property int stackedCatPad: (catAdjacentToDivider && useVertical)  ? -6 : 0   // text-below-cat (fine-tune)
+    readonly property int sideCatPad:    (catAdjacentToDivider && !useVertical) ? 22 : 0   // side-by-side
 
-    // Tight text metrics (vertical layout): the digits' actual ink height, and the empty
-    // vertical space (font leading + ascent/descent gap) to trim with negative padding.
-    readonly property real textInkHeight:    Math.ceil(textMetrics.tightBoundingRect.height)
-    readonly property real verticalTextTrim: Math.max(0, (label.contentHeight - textInkHeight) / 2)
+    // ── Total content sizes ─────────────────────────────────────────────────────
+    readonly property real contentMainH: catW + cpuW + tempW + visibleDividerCount * dividerBlockWidth
+    readonly property real contentMainV: catH + cpuH + tempH + visibleDividerCount * dividerBlockHeight
 
-    // ── Minimum / preferred sizes reported to the panel ──────────────────────
-
-    // Horizontal: cat + 2×gap + divider + text  (divider collapses to 0 when hidden)
+    // ── Minimum / preferred sizes reported to the panel ─────────────────────────
     property real totalMinWidth: useVertical
-        ? Math.max(catBlockWidth, textBlockWidth)
-        : catBlockWidth + dividerBlockWidth + textBlockWidth + 2 * baseSpacing + sideCatPad
-
+        ? maxItemWidth
+        : contentMainH + sideCatPad + gapsForSizing * baseSpacing
     property real totalMinHeight: useVertical
-        ? catBlockHeight + stackedCatPad + dividerBlockHeight + textBlockHeight
-          + configuredSpacing * (showDivider ? 2 : 1)
-        : maxBlockHeight
+        ? contentMainV + stackedCatPad + gapsForSizing * configuredSpacing
+        : maxItemHeight
 
     Layout.minimumWidth:    totalMinWidth
     Layout.minimumHeight:   totalMinHeight
@@ -97,8 +143,7 @@ Item {
     // Vertical fixed: cap at natural content height. Vertical auto: uncap so widget fills panel height.
     Layout.maximumHeight: (useVertical && !spacingIsAuto) ? totalMinHeight : -1
 
-    // ── Layout detection (used by parent context) ─────────────────────────────
-
+    // ── Layout detection (used by parent context) ───────────────────────────────
     enum LayoutType {
         HorizontalPanel,
         VerticalPanel,
@@ -106,124 +151,91 @@ Item {
         VerticalDesktop,
         IconOnly
     }
-
     property int layoutForm
-
     Binding on layoutForm {
         delayed: true
         value: {
             if (root.inPanel)
                 return root.isVertical ? CompactRepresentation.LayoutType.VerticalPanel
                                        : CompactRepresentation.LayoutType.HorizontalPanel
-            if (compactRepresentation.parent.width - catContainer.Layout.preferredWidth >= label.contentWidth)
+            if (compactRepresentation.parent.width - catContainer.Layout.preferredWidth >= cpuLabel.contentWidth)
                 return CompactRepresentation.LayoutType.HorizontalDesktop
-            if (compactRepresentation.parent.height - catContainer.Layout.preferredHeight >= label.contentHeight)
+            if (compactRepresentation.parent.height - catContainer.Layout.preferredHeight >= cpuLabel.contentHeight)
                 return CompactRepresentation.LayoutType.VerticalDesktop
             return CompactRepresentation.LayoutType.IconOnly
         }
     }
 
-    // ── Grid ─────────────────────────────────────────────────────────────────
-    //
-    // Horizontal: 3 columns — [cat(0) | divider(1) | text(2)] or swapped.
-    //   columnSpacing = configuredSpacing when fixed; fills available width when auto.
-    //   In fixed mode grid.width = natural content width; anchors.centerIn handles centering.
-    //
-    // Vertical: 1 column, 2–3 rows (cat, [divider,] text).
-    //   Auto: rowSpacing fills available height (mirrors horizontal auto behaviour).
-    //   Fixed: rowSpacing = configuredSpacing.
-
+    // ── Grid ─────────────────────────────────────────────────────────────────────
+    // One line of cells (horizontal row / vertical column). Each element computes its
+    // index from `sequence`, so visibility, order and divider count all flow naturally.
     GridLayout {
         id: grid
         anchors.centerIn: parent
 
-        // In fixed-spacing mode, shrink to natural content size so centering handles the rest
+        // Fixed-spacing mode: shrink to natural content size so centring handles the rest.
         width: useVertical ? compactRepresentation.width
              : (spacingIsAuto ? compactRepresentation.width
-                              : catBlockWidth + dividerBlockWidth + textBlockWidth + 2 * configuredSpacing + sideCatPad)
+                              : contentMainH + sideCatPad + gapsForSizing * configuredSpacing)
         height: compactRepresentation.height
 
-        columns: useVertical ? 1 : 3
-        // 3 rows in vertical when divider is shown (cat, divider, text); 2 rows otherwise
-        rows:    useVertical ? (showDivider ? 3 : 2) : 1
+        columns: useVertical ? 1 : Math.max(1, cellCount)
+        rows:    useVertical ? Math.max(1, cellCount) : 1
 
-        // Auto: spread the available room equally across the 2 column gaps.
-        // Fixed: use configuredSpacing directly.
+        // Auto: spread available room equally across all gaps. Fixed: configuredSpacing.
         columnSpacing: {
             if (useVertical) return 0
             if (spacingIsAuto)
-                return Math.max(baseSpacing,
-                    (compactRepresentation.width - catBlockWidth - dividerBlockWidth - textBlockWidth - sideCatPad) / 2)
+                return Math.max(baseSpacing, (compactRepresentation.width - contentMainH - sideCatPad) / gapCount)
             return configuredSpacing
         }
-        // Horizontal: fixed baseSpacing between the single row's items.
-        // Vertical fixed: use configuredSpacing.
-        // Vertical auto: distribute available height equally across row gaps (mirrors horizontal auto).
         rowSpacing: {
             if (!useVertical) return baseSpacing
-            if (spacingIsAuto) {
-                var numGaps = showDivider ? 2 : 1
-                var available = compactRepresentation.height
-                    - catBlockHeight - stackedCatPad
-                    - dividerBlockHeight - textBlockHeight
-                return Math.max(baseSpacing, available / numGaps)
-            }
+            if (spacingIsAuto)
+                return Math.max(baseSpacing, (compactRepresentation.height - contentMainV - stackedCatPad) / gapCount)
             return configuredSpacing
         }
 
-        // ── Cat ──────────────────────────────────────────────────────────────
-
+        // ── Cat ────────────────────────────────────────────────────────────────
         Item {
             id: catContainer
-            visible: displayType !== 2
+            visible: showCat
+            readonly property int cellIndex: compactRepresentation.sequence.indexOf("cat")
 
-            // Horizontal: col 0 normal, col 2 swapped.
-            // Vertical with divider: row 0/2; without divider: row 0/1.
-            Layout.column: useVertical ? 0 : (swapOrder ? 2 : 0)
-            Layout.row: useVertical
-                ? (showDivider ? (swapOrder ? 2 : 0)
-                               : (swapOrder ? 1 : 0))
-                : 0
-            Layout.alignment:      Qt.AlignVCenter | Qt.AlignHCenter
+            Layout.column: useVertical ? 0 : Math.max(0, cellIndex)
+            Layout.row:    useVertical ? Math.max(0, cellIndex) : 0
+            Layout.alignment:       Qt.AlignVCenter | Qt.AlignHCenter
             Layout.preferredWidth:  catBox
             Layout.preferredHeight: catBox
             Layout.minimumWidth:    catBox
             Layout.minimumHeight:   catBox
             Layout.maximumWidth:    catBox
             Layout.maximumHeight:   catBox
-            // Margin on the cat's divider-facing edge, compensating for the text label's
-            // implicit font-metrics padding (stackedCatPad / sideCatPad).
+            // Margin on the cat's divider-facing edge (cat is always at an end of the line).
             Layout.topMargin:    (useVertical &&  swapOrder) ? stackedCatPad : 0
             Layout.bottomMargin: (useVertical && !swapOrder) ? stackedCatPad : 0
             Layout.leftMargin:   (!useVertical &&  swapOrder) ? sideCatPad : 0
             Layout.rightMargin:  (!useVertical && !swapOrder) ? sideCatPad : 0
 
             KSvg.SvgItem {
-                id: svgItem
-                property int sourceIndex: 0
                 anchors.fill: parent
-                imagePath: imagePaths[0]
+                imagePath: currentCatImage
             }
         }
 
-        // ── Divider ──────────────────────────────────────────────────────────
-        // Horizontal: vertical bar (thickness × dividerLength), centered in narrow column.
-        // Vertical: horizontal dash (dividerLength × thickness), centered in 1-row slot.
-
+        // ── Divider after item 1 ─────────────────────────────────────────────────
         Item {
-            id: dividerContainer
-            visible: showDivider
+            id: dividerA
+            visible: compactRepresentation.sequence.indexOf("d1") >= 0
+            readonly property int cellIndex: compactRepresentation.sequence.indexOf("d1")
 
-            Layout.column: useVertical ? 0 : 1
-            Layout.row:    useVertical ? 1 : 0
+            Layout.column: useVertical ? 0 : Math.max(0, cellIndex)
+            Layout.row:    useVertical ? Math.max(0, cellIndex) : 0
             Layout.alignment: Qt.AlignVCenter | Qt.AlignHCenter
-
-            Layout.preferredWidth:  useVertical ? maxBlockWidth : dividerBlockWidth
-            Layout.minimumWidth:    0
-            Layout.maximumWidth:    useVertical ? maxBlockWidth : dividerBlockWidth
-            Layout.preferredHeight: useVertical ? dividerBlockHeight : maxBlockHeight
-            Layout.minimumHeight:   0
-            Layout.maximumHeight:   useVertical ? dividerBlockHeight : maxBlockHeight
+            Layout.preferredWidth:  useVertical ? maxItemWidth : dividerBlockWidth
+            Layout.maximumWidth:    useVertical ? maxItemWidth : dividerBlockWidth
+            Layout.preferredHeight: useVertical ? dividerBlockHeight : maxItemHeight
+            Layout.maximumHeight:   useVertical ? dividerBlockHeight : maxItemHeight
 
             Rectangle {
                 anchors.centerIn: parent
@@ -234,37 +246,31 @@ Item {
             }
         }
 
-        // ── Text ─────────────────────────────────────────────────────────────
-
+        // ── CPU percentage ───────────────────────────────────────────────────────
         PlasmaComponents3.Label {
-            id: label
+            id: cpuLabel
+            visible: showCpu
+            readonly property int cellIndex: compactRepresentation.sequence.indexOf("cpu")
             text: totalSensor.formattedValue
-            visible: displayType !== 1
 
-            Layout.column: useVertical ? 0 : (swapOrder ? 0 : 2)
-            Layout.row: useVertical
-                ? (showDivider ? (swapOrder ? 0 : 2)
-                               : (swapOrder ? 0 : 1))
-                : 0
-            Layout.alignment:      Qt.AlignVCenter | Qt.AlignHCenter
-            Layout.preferredWidth:  textBoxWidth
-            Layout.preferredHeight: textBlockHeight
-            Layout.minimumWidth:    textBoxWidth
-            Layout.minimumHeight:   textBlockHeight
-            Layout.maximumWidth:    textBoxWidth
-            Layout.maximumHeight:   textBlockHeight
+            Layout.column: useVertical ? 0 : Math.max(0, cellIndex)
+            Layout.row:    useVertical ? Math.max(0, cellIndex) : 0
+            Layout.alignment:       Qt.AlignVCenter | Qt.AlignHCenter
+            Layout.preferredWidth:  cpuBoxWidth
+            Layout.minimumWidth:    cpuBoxWidth
+            Layout.maximumWidth:    cpuBoxWidth
+            Layout.preferredHeight: cpuBlockHeight
+            Layout.minimumHeight:   cpuBlockHeight
+            Layout.maximumHeight:   cpuBlockHeight
 
             font.pixelSize:      32 * textScaleFactor * 0.8
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment:   Text.AlignVCenter
             renderType:          Text.NativeRendering
-            // Stacked layout: pull the cell in by the font's non-ink vertical space (leading +
-            // the gap between the glyph ink and the font ascent/descent) so it hugs the digits.
-            // Negative padding lets that empty space overflow the cell instead of inflating it.
-            topPadding:    useVertical ? -verticalTextTrim : 0
-            bottomPadding: useVertical ? -verticalTextTrim : 0
+            // Vertical layout: crop the font's non-ink vertical space so the cell hugs the digits.
+            topPadding:    useVertical ? -cpuVerticalTrim : 0
+            bottomPadding: useVertical ? -cpuVerticalTrim : 0
 
-            // Colour shifts with CPU load for at-a-glance feedback
             color: {
                 var v = totalSensor.value
                 if (v >= 85) return Kirigami.Theme.negativeTextColor
@@ -274,16 +280,68 @@ Item {
             Behavior on color { ColorAnimation { duration: 400 } }
         }
 
-        TextMetrics {
-            id: textMetrics
-            font: label.font          // full font (family + size) so tightBoundingRect is accurate
-            text: "100.0%"
+        // ── Divider after item 2 ─────────────────────────────────────────────────
+        Item {
+            id: dividerB
+            visible: compactRepresentation.sequence.indexOf("d2") >= 0
+            readonly property int cellIndex: compactRepresentation.sequence.indexOf("d2")
+
+            Layout.column: useVertical ? 0 : Math.max(0, cellIndex)
+            Layout.row:    useVertical ? Math.max(0, cellIndex) : 0
+            Layout.alignment: Qt.AlignVCenter | Qt.AlignHCenter
+            Layout.preferredWidth:  useVertical ? maxItemWidth : dividerBlockWidth
+            Layout.maximumWidth:    useVertical ? maxItemWidth : dividerBlockWidth
+            Layout.preferredHeight: useVertical ? dividerBlockHeight : maxItemHeight
+            Layout.maximumHeight:   useVertical ? dividerBlockHeight : maxItemHeight
+
+            Rectangle {
+                anchors.centerIn: parent
+                width:  useVertical ? dividerLength : dividerThickness
+                height: useVertical ? dividerThickness : dividerLength
+                color:  Kirigami.Theme.textColor
+                opacity: 0.45
+            }
         }
 
+        // ── Temperature ──────────────────────────────────────────────────────────
+        PlasmaComponents3.Label {
+            id: tempLabel
+            visible: showTemp
+            readonly property int cellIndex: compactRepresentation.sequence.indexOf("temp")
+            text: tempText
+
+            Layout.column: useVertical ? 0 : Math.max(0, cellIndex)
+            Layout.row:    useVertical ? Math.max(0, cellIndex) : 0
+            Layout.alignment:       Qt.AlignVCenter | Qt.AlignHCenter
+            Layout.preferredWidth:  tempBoxWidth
+            Layout.minimumWidth:    tempBoxWidth
+            Layout.maximumWidth:    tempBoxWidth
+            Layout.preferredHeight: tempBlockHeight
+            Layout.minimumHeight:   tempBlockHeight
+            Layout.maximumHeight:   tempBlockHeight
+
+            font.pixelSize:      32 * tempScaleFactor * 0.8
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment:   Text.AlignVCenter
+            renderType:          Text.NativeRendering
+            topPadding:    useVertical ? -tempVerticalTrim : 0
+            bottomPadding: useVertical ? -tempVerticalTrim : 0
+
+            color: {
+                var c = tempSensor.value
+                if (c >= 85) return Kirigami.Theme.negativeTextColor
+                if (c >= 70) return Kirigami.Theme.neutralTextColor
+                return Kirigami.Theme.textColor
+            }
+            Behavior on color { ColorAnimation { duration: 400 } }
+        }
+
+        // Width/height metrics. Full font (family + size) so tightBoundingRect is accurate.
+        TextMetrics { id: cpuMetrics;  font: cpuLabel.font;  text: "100.0%" }
+        TextMetrics { id: tempMetrics; font: tempLabel.font; text: tempText }
     }
 
-    // ── Sensors ──────────────────────────────────────────────────────────────
-
+    // ── Sensors ──────────────────────────────────────────────────────────────────
     Sensors.Sensor {
         id: totalSensor
         sensorId: "cpu/all/usage"
@@ -296,23 +354,21 @@ Item {
         updateRateLimit: plasmoid.configuration.tempUpdateRate
     }
 
-    // ── Animation timer ───────────────────────────────────────────────────────
-    // Picks normal or angry asset set; actual cycle logic is identical.
-
+    // ── Animation timer ───────────────────────────────────────────────────────────
+    // Lower CPU = slower walk. Floor at 30ms and coerce a missing reading to 0 so the
+    // interval can never become NaN/≤0 (which would make the Timer free-run).
     Timer {
         id: switchTimer
         repeat: true
-        running: true
-        // Lower CPU = slower walk. Floor at 30ms and coerce a missing reading to 0 so the
-        // interval can never become NaN/≤0 (which would make the Timer free-run).
+        running: showCat
         interval: Math.max(30, Math.ceil(5000 / Math.sqrt((totalSensor.value || 0) + 35) - 400))
         onTriggered: {
-            if (svgItem.sourceIndex >= 5) svgItem.sourceIndex = 0
+            if (catFrameIndex >= 5) catFrameIndex = 0
             var paths = isAngry ? angryImagePaths : imagePaths
-            svgItem.imagePath = (totalSensor.value < plasmoid.configuration.idle)
+            currentCatImage = (totalSensor.value < plasmoid.configuration.idle)
                 ? paths[0]
-                : paths[svgItem.sourceIndex + 1]
-            svgItem.sourceIndex++
+                : paths[catFrameIndex + 1]
+            catFrameIndex++
         }
     }
 }

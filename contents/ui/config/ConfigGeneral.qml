@@ -21,6 +21,9 @@ KCM.SimpleKCM {
     property alias cfg_tempUpdateRate:  tempUpdateRateSpinBox.value
     property alias cfg_dividerScale:     dividerScaleSlider.value
     property alias cfg_dividerThickness: dividerThicknessSpinBox.value
+    property alias cfg_showTemp:         showTempCheckBox.checked
+    property alias cfg_tempScale:        tempScaleSlider.value
+    property alias cfg_tempUnit:         tempUnitBox.currentIndex
 
     // customSpacing: -1 = auto, ≥0 = fixed px. Cannot use property alias because
     // the value toggles between -1 and a slider value — no single control maps to it.
@@ -46,6 +49,9 @@ KCM.SimpleKCM {
     property int    cfg_tempUpdateRateDefault:   5000
     property real   cfg_dividerScaleDefault:     1.0
     property int    cfg_dividerThicknessDefault: 2
+    property bool   cfg_showTempDefault:         false
+    property real   cfg_tempScaleDefault:        1.0
+    property int    cfg_tempUnitDefault:         0
 
     // Spacing UI mode: 0=auto, 1=slider, 2=manual. Not persisted — initialised from cfg_customSpacing.
     property int spacingMode: 0
@@ -55,6 +61,15 @@ KCM.SimpleKCM {
         if (spacingMode === 0) spacingAutoRadio.checked = true
         else if (spacingMode === 1) spacingSliderRadio.checked = true
         else spacingManualRadio.checked = true
+    }
+
+    // Keep all four size sliders in lock-step when "Link sizes" is on. Setting a slider to
+    // its current value is a no-op, so this can't loop even though every slider calls it.
+    function syncScales(v) {
+        catScaleSlider.value     = v
+        textScaleSlider.value    = v
+        dividerScaleSlider.value = v
+        tempScaleSlider.value    = v
     }
 
     // Live sensor preview (reads whatever is typed in tempSensorField)
@@ -186,12 +201,7 @@ KCM.SimpleKCM {
             Kirigami.FormData.label: i18n("Link sizes")
             text: i18n("Keep cat, text and divider the same size")
             checked: true
-            onCheckedChanged: {
-                if (checked) {
-                    textScaleSlider.value = catScaleSlider.value
-                    dividerScaleSlider.value = catScaleSlider.value
-                }
-            }
+            onCheckedChanged: if (checked) syncScales(catScaleSlider.value)
         }
 
         RowLayout {
@@ -201,7 +211,7 @@ KCM.SimpleKCM {
                 id: catScaleSlider
                 Layout.fillWidth: true
                 from: 0.25; to: 2.0; stepSize: 0.05; value: 1.0
-                onValueChanged: { if (linkCheckbox.checked) { textScaleSlider.value = value; dividerScaleSlider.value = value } }
+                onValueChanged: if (linkCheckbox.checked) syncScales(value)
             }
             Controls.Label {
                 text: Math.round(catScaleSlider.value * 100) + "%"
@@ -218,7 +228,7 @@ KCM.SimpleKCM {
                 Layout.fillWidth: true
                 from: 0.25; to: 2.0; stepSize: 0.05; value: 1.0
                 enabled: !linkCheckbox.checked
-                onValueChanged: { if (linkCheckbox.checked) { catScaleSlider.value = value; dividerScaleSlider.value = value } }
+                onValueChanged: if (linkCheckbox.checked) syncScales(value)
             }
             Controls.Label {
                 text: Math.round(textScaleSlider.value * 100) + "%"
@@ -238,7 +248,7 @@ KCM.SimpleKCM {
                 Layout.fillWidth: true
                 from: 0.25; to: 2.0; stepSize: 0.05; value: 1.0
                 enabled: !linkCheckbox.checked
-                onValueChanged: { if (linkCheckbox.checked) { catScaleSlider.value = value; textScaleSlider.value = value } }
+                onValueChanged: if (linkCheckbox.checked) syncScales(value)
             }
             Controls.Label {
                 text: Math.round(dividerScaleSlider.value * 100) + "%"
@@ -256,6 +266,23 @@ KCM.SimpleKCM {
                 from: 1; to: 10; stepSize: 1; editable: true
             }
             Controls.Label { text: i18n("px") }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            Kirigami.FormData.label: i18n("Temperature size")
+            Controls.Slider {
+                id: tempScaleSlider
+                Layout.fillWidth: true
+                from: 0.25; to: 2.0; stepSize: 0.05; value: 1.0
+                enabled: !linkCheckbox.checked
+                onValueChanged: if (linkCheckbox.checked) syncScales(value)
+            }
+            Controls.Label {
+                text: Math.round(tempScaleSlider.value * 100) + "%"
+                Layout.minimumWidth: scaleLabelMetrics.width
+                horizontalAlignment: Text.AlignRight
+            }
         }
 
         // ── Sensor ───────────────────────────────────────────────────────────
@@ -298,17 +325,85 @@ KCM.SimpleKCM {
             }
         }
 
-        // ── Angry Cat ────────────────────────────────────────────────────────
+        // ── Temperature ────────────────────────────────────────────────────────
+        // Sensor settings here feed both the temperature meter and the Angry Cat trigger.
 
         Kirigami.Separator {
-            Kirigami.FormData.label: i18n("Angry Cat")
+            Kirigami.FormData.label: i18n("Temperature")
             Kirigami.FormData.isSection: true
             Layout.fillWidth: true
         }
 
         Controls.CheckBox {
+            id: showTempCheckBox
+            Kirigami.FormData.label: i18n("Meter")
+            text: i18n("Show temperature meter")
+        }
+
+        Controls.ComboBox {
+            id: tempUnitBox
+            Layout.fillWidth: true
+            enabled: showTempCheckBox.checked
+            Kirigami.FormData.label: i18n("Unit")
+            model: [
+                i18n("Celsius (°C)"),
+                i18n("Fahrenheit (°F)"),
+                i18n("Kelvin (K)")
+            ]
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            enabled: showTempCheckBox.checked || angryCheckbox.checked
+            Kirigami.FormData.label: i18n("Sensor")
+
+            Controls.TextField {
+                id: tempSensorField
+                Layout.fillWidth: true
+                placeholderText: "cpu/cpu0/temperature"
+            }
+        }
+
+        // Live readout — immediate feedback on whether the sensor ID is correct
+        Controls.Label {
+            enabled: showTempCheckBox.checked || angryCheckbox.checked
+            Kirigami.FormData.label: i18n("Reading")
+            text: previewSensor.value > 0
+                ? i18n("%1 °C", Math.round(previewSensor.value))
+                : i18n("No data — check sensor ID")
+            color: previewSensor.value > 0 ? Kirigami.Theme.positiveTextColor
+                                           : Kirigami.Theme.neutralTextColor
+        }
+
+        Controls.Label {
+            enabled: showTempCheckBox.checked || angryCheckbox.checked
+            Kirigami.FormData.label: " "
+            text: i18n("Find sensor IDs in KDE System Monitor › Sensors tab, right-click a sensor → Copy sensor name")
+            wrapMode: Text.WordWrap
+            Layout.maximumWidth: 340
+            font.italic: true
+            opacity: 0.6
+        }
+
+        Controls.SpinBox {
+            id: tempUpdateRateSpinBox
+            Layout.fillWidth: true
+            enabled: showTempCheckBox.checked || angryCheckbox.checked
+            Kirigami.FormData.label: i18n("Update rate")
+            from: 500; to: 60000; stepSize: 500; editable: true
+            textFromValue: function(value, locale) {
+                var s = value / 1000
+                return (s === 1) ? i18n("1 second") : i18n("%1 seconds", s)
+            }
+            valueFromText: function(text, locale) {
+                var v = parseFloat(text)
+                return isNaN(v) ? 5000 : Math.round(v * 1000)
+            }
+        }
+
+        Controls.CheckBox {
             id: angryCheckbox
-            Kirigami.FormData.label: i18n("Enable")
+            Kirigami.FormData.label: i18n("Angry cat")
             text: i18n("Use angry frames when temperature reaches threshold")
         }
 
@@ -328,55 +423,6 @@ KCM.SimpleKCM {
                 horizontalAlignment: Text.AlignRight
             }
             TextMetrics { id: angryTempMetrics; text: "120°C" }
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            enabled: angryCheckbox.checked
-            Kirigami.FormData.label: i18n("Temp sensor")
-
-            Controls.TextField {
-                id: tempSensorField
-                Layout.fillWidth: true
-                placeholderText: "cpu/cpu0/temperature"
-            }
-        }
-
-        // Live readout — immediate feedback on whether the sensor ID is correct
-        Controls.Label {
-            enabled: angryCheckbox.checked
-            Kirigami.FormData.label: i18n("Reading")
-            text: previewSensor.value > 0
-                ? i18n("%1 °C", Math.round(previewSensor.value))
-                : i18n("No data — check sensor ID")
-            color: previewSensor.value > 0 ? Kirigami.Theme.positiveTextColor
-                                           : Kirigami.Theme.neutralTextColor
-        }
-
-        Controls.Label {
-            enabled: angryCheckbox.checked
-            Kirigami.FormData.label: " "
-            text: i18n("Find sensor IDs in KDE System Monitor › Sensors tab, right-click a sensor → Copy sensor name")
-            wrapMode: Text.WordWrap
-            Layout.maximumWidth: 340
-            font.italic: true
-            opacity: 0.6
-        }
-
-        Controls.SpinBox {
-            id: tempUpdateRateSpinBox
-            Layout.fillWidth: true
-            enabled: angryCheckbox.checked
-            Kirigami.FormData.label: i18n("Temp update rate")
-            from: 500; to: 60000; stepSize: 500; editable: true
-            textFromValue: function(value, locale) {
-                var s = value / 1000
-                return (s === 1) ? i18n("1 second") : i18n("%1 seconds", s)
-            }
-            valueFromText: function(text, locale) {
-                var v = parseFloat(text)
-                return isNaN(v) ? 5000 : Math.round(v * 1000)
-            }
         }
     }
 }
