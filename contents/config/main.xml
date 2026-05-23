@@ -9,7 +9,10 @@
             <default>0</default>
         </entry>
         <entry name="type" type="Int">
+            <!-- 0=cat+CPU, 1=cat only, 2=CPU only, 3=no cat/CPU (used with showTemp for temperature only) -->
             <default>0</default>
+            <min>0</min>
+            <max>3</max>
         </entry>
         <entry name="updateRateLimit" type="Int">
             <default>1000</default>

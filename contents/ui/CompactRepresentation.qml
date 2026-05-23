@@ -24,9 +24,9 @@ Item {
     readonly property int  dividerThickness: plasmoid.configuration.dividerThickness
     readonly property int  tempUnit:         plasmoid.configuration.tempUnit
 
-    // Which elements are shown. displayType: 0=cat+cpu, 1=cat only, 2=cpu only.
-    readonly property bool showCat:  displayType !== 2
-    readonly property bool showCpu:  displayType !== 1
+    // Which elements are shown. displayType: 0=cat+cpu, 1=cat only, 2=cpu only, 3=no cat/cpu.
+    readonly property bool showCat:  displayType === 0 || displayType === 1
+    readonly property bool showCpu:  displayType === 0 || displayType === 2
     readonly property bool showTemp: plasmoid.configuration.showTemp === true
 
     // ── Spacing ─────────────────────────────────────────────────────────────────
@@ -89,15 +89,13 @@ Item {
 
     // CPU text box: fixed-width metric ("100.0%") avoids jitter as the value changes.
     readonly property real cpuBoxWidth:     cpuMetrics.width + 16 * textScaleFactor
-    readonly property real cpuInkHeight:    Math.ceil(cpuMetrics.tightBoundingRect.height)
-    readonly property real cpuVerticalTrim: Math.max(0, (cpuLabel.contentHeight - cpuInkHeight) / 2)
-    readonly property real cpuBlockHeight:  useVertical ? (cpuInkHeight  || 32 * textScaleFactor) : 32 * textScaleFactor
+    readonly property real cpuTextHeight:   Math.max(8, Math.ceil(cpuLabel.contentHeight))
+    readonly property real cpuBlockHeight:  useVertical ? (cpuTextHeight || 32 * textScaleFactor) : 32 * textScaleFactor
 
     // Temp text box: tracks the actual string (temperature changes slowly → no jitter).
     readonly property real tempBoxWidth:     tempMetrics.width + 16 * tempScaleFactor
-    readonly property real tempInkHeight:    Math.ceil(tempMetrics.tightBoundingRect.height)
-    readonly property real tempVerticalTrim: Math.max(0, (tempLabel.contentHeight - tempInkHeight) / 2)
-    readonly property real tempBlockHeight:  useVertical ? (tempInkHeight || 32 * tempScaleFactor) : 32 * tempScaleFactor
+    readonly property real tempTextHeight:   Math.max(8, Math.ceil(tempLabel.contentHeight))
+    readonly property real tempBlockHeight:  useVertical ? (tempTextHeight || 32 * tempScaleFactor) : 32 * tempScaleFactor
 
     // Per-element footprint (0 when hidden)
     readonly property real catW:  showCat  ? catBox         : 0
@@ -112,7 +110,7 @@ Item {
 
     // Divider cell sizes
     readonly property real dividerBlockWidth:  (!useVertical && showDivider) ? (dividerThickness + 6) : 0
-    readonly property real dividerBlockHeight: (useVertical && showDivider) ? dividerThickness : 0
+    readonly property real dividerBlockHeight: (useVertical && showDivider) ? dividerThickness + 10 : 0
     readonly property real dividerLength: Math.round(32 * dividerScaleFactor * 0.8)
 
     // ── Cat-divider symmetry pads (empirical) ───────────────────────────────────
@@ -120,7 +118,7 @@ Item {
     // against the cat's divider-facing edge. Only applies when the cat actually has a
     // divider neighbour (the cat is always at an end of the line, so any divider is adjacent).
     readonly property bool catAdjacentToDivider: showCat && visibleDividerCount > 0
-    readonly property int stackedCatPad: (catAdjacentToDivider && useVertical)  ? -6 : 0   // text-below-cat (fine-tune)
+    readonly property int stackedCatPad: 0   // divider cell (+10) already provides visual separation
     readonly property int sideCatPad:    (catAdjacentToDivider && !useVertical) ? 22 : 0   // side-by-side
 
     // ── Total content sizes ─────────────────────────────────────────────────────
@@ -130,9 +128,9 @@ Item {
     // ── Minimum / preferred sizes reported to the panel ─────────────────────────
     property real totalMinWidth: useVertical
         ? maxItemWidth
-        : contentMainH + sideCatPad + gapsForSizing * baseSpacing
+        : contentMainH + sideCatPad + gapsForSizing * configuredSpacing
     property real totalMinHeight: useVertical
-        ? contentMainV + stackedCatPad + gapsForSizing * configuredSpacing
+        ? contentMainV + gapsForSizing * configuredSpacing
         : maxItemHeight
 
     Layout.minimumWidth:    totalMinWidth
@@ -177,7 +175,7 @@ Item {
         width: useVertical ? compactRepresentation.width
              : (spacingIsAuto ? compactRepresentation.width
                               : contentMainH + sideCatPad + gapsForSizing * configuredSpacing)
-        height: compactRepresentation.height
+        height: useVertical ? totalMinHeight : compactRepresentation.height
 
         columns: useVertical ? 1 : Math.max(1, cellCount)
         rows:    useVertical ? Math.max(1, cellCount) : 1
@@ -191,8 +189,10 @@ Item {
         }
         rowSpacing: {
             if (!useVertical) return baseSpacing
-            if (spacingIsAuto)
-                return Math.max(baseSpacing, (compactRepresentation.height - contentMainV - stackedCatPad) / gapCount)
+            if (spacingIsAuto) {
+                if (cellCount <= 1) return 0
+                return Math.max(baseSpacing, (totalMinHeight - contentMainV) / gapCount)
+            }
             return configuredSpacing
         }
 
@@ -267,9 +267,8 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment:   Text.AlignVCenter
             renderType:          Text.NativeRendering
-            // Vertical layout: crop the font's non-ink vertical space so the cell hugs the digits.
-            topPadding:    useVertical ? -cpuVerticalTrim : 0
-            bottomPadding: useVertical ? -cpuVerticalTrim : 0
+            topPadding:          0
+            bottomPadding:       0
 
             color: {
                 var v = totalSensor.value
@@ -324,8 +323,8 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment:   Text.AlignVCenter
             renderType:          Text.NativeRendering
-            topPadding:    useVertical ? -tempVerticalTrim : 0
-            bottomPadding: useVertical ? -tempVerticalTrim : 0
+            topPadding:          0
+            bottomPadding:       0
 
             color: {
                 var c = tempSensor.value
@@ -336,7 +335,7 @@ Item {
             Behavior on color { ColorAnimation { duration: 400 } }
         }
 
-        // Width/height metrics. Full font (family + size) so tightBoundingRect is accurate.
+        // Width metrics. Full font (family + size) so fixed text boxes match the rendered labels.
         TextMetrics { id: cpuMetrics;  font: cpuLabel.font;  text: "100.0%" }
         TextMetrics { id: tempMetrics; font: tempLabel.font; text: tempText }
     }
@@ -344,13 +343,15 @@ Item {
     // ── Sensors ──────────────────────────────────────────────────────────────────
     Sensors.Sensor {
         id: totalSensor
-        sensorId: "cpu/all/usage"
+        enabled: showCpu || showCat
+        sensorId: enabled ? "cpu/all/usage" : ""
         updateRateLimit: plasmoid.configuration.updateRateLimit
     }
 
     Sensors.Sensor {
         id: tempSensor
-        sensorId: plasmoid.configuration.tempSensorId
+        enabled: showTemp || plasmoid.configuration.angryEnabled === true
+        sensorId: enabled ? plasmoid.configuration.tempSensorId : ""
         updateRateLimit: plasmoid.configuration.tempUpdateRate
     }
 

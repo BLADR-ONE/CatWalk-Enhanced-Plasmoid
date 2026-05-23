@@ -7,7 +7,7 @@ import org.kde.ksysguard.sensors as Sensors
 
 KCM.SimpleKCM {
     property alias cfg_idle:            idleSlider.value
-    property alias cfg_type:            typeBox.currentIndex
+    property int cfg_type:              0
     property alias cfg_updateRateLimit: updateRateLimitSpinBox.value
     property alias cfg_catScale:        catScaleSlider.value
     property alias cfg_textScale:       textScaleSlider.value
@@ -21,7 +21,7 @@ KCM.SimpleKCM {
     property alias cfg_tempUpdateRate:  tempUpdateRateSpinBox.value
     property alias cfg_dividerScale:     dividerScaleSlider.value
     property alias cfg_dividerThickness: dividerThicknessSpinBox.value
-    property alias cfg_showTemp:         showTempCheckBox.checked
+    property bool cfg_showTemp:          false
     property alias cfg_tempScale:        tempScaleSlider.value
     property alias cfg_tempUnit:         tempUnitBox.currentIndex
 
@@ -72,14 +72,61 @@ KCM.SimpleKCM {
         tempScaleSlider.value    = v
     }
 
-    // Live sensor preview (reads whatever is typed in tempSensorField)
+    // Live sensor preview — only polls when temp features are active and a sensor ID is entered
+    readonly property bool previewSensorActive: (cfg_showTemp || angryCheckbox.checked) && tempSensorField.text.length > 0
+
     Sensors.Sensor {
         id: previewSensor
-        sensorId: tempSensorField.text
+        enabled: previewSensorActive
+        sensorId: previewSensorActive ? tempSensorField.text : ""
         updateRateLimit: cfg_tempUpdateRate
     }
 
     Controls.ButtonGroup { id: spacingModeGroup }
+
+    function displayIndexFor(type, showTemp) {
+        if (type === 1 && !showTemp) return 0
+        if (type === 2 && !showTemp) return 1
+        if (type === 3 && showTemp) return 2
+        if (type === 0 && !showTemp) return 3
+        if (type === 1 && showTemp) return 4
+        if (type === 2 && showTemp) return 5
+        if (type === 0 && showTemp) return 6
+        return 3
+    }
+
+    function applyDisplayIndex(index) {
+        switch (index) {
+        case 0:
+            cfg_type = 1
+            cfg_showTemp = false
+            break
+        case 1:
+            cfg_type = 2
+            cfg_showTemp = false
+            break
+        case 2:
+            cfg_type = 3
+            cfg_showTemp = true
+            break
+        case 4:
+            cfg_type = 1
+            cfg_showTemp = true
+            break
+        case 5:
+            cfg_type = 2
+            cfg_showTemp = true
+            break
+        case 6:
+            cfg_type = 0
+            cfg_showTemp = true
+            break
+        default:
+            cfg_type = 0
+            cfg_showTemp = false
+            break
+        }
+    }
 
     Kirigami.FormLayout {
         id: formRoot
@@ -94,27 +141,45 @@ KCM.SimpleKCM {
 
         Controls.CheckBox {
             id: textBelowCatCheckBox
-            text: i18n("Show text below cat (instead of side by side)")
+            text: i18n("Show CPU/temperature text below cat (instead of side by side)")
         }
 
         Controls.CheckBox {
             id: swapOrderCheckBox
-            text: i18n("Swap cat and text order")
+            text: i18n("Swap cat and CPU/temperature text order")
         }
 
         Controls.CheckBox {
             id: showDividerCheckBox
-            text: i18n("Show divider between cat and text")
+            text: i18n("Show divider between cat and CPU/temperature text")
         }
 
         Controls.ComboBox {
-            id: typeBox
+            id: displayBox
             Layout.fillWidth: true
-            Kirigami.FormData.label: i18n("Display")
+            Kirigami.FormData.label: i18n("Displayed items")
+            currentIndex: displayIndexFor(cfg_type, cfg_showTemp)
             model: [
-                i18n("Character and percentage"),
-                i18n("Character only"),
-                i18n("Percentage only")
+                i18n("Cat only"),
+                i18n("CPU percentage only"),
+                i18n("Temperature only"),
+                i18n("Cat + CPU percentage"),
+                i18n("Cat + temperature"),
+                i18n("CPU percentage + temperature"),
+                i18n("Cat + CPU percentage + temperature")
+            ]
+            onActivated: applyDisplayIndex(index)
+        }
+
+        Controls.ComboBox {
+            id: tempUnitBox
+            Layout.fillWidth: true
+            enabled: cfg_showTemp
+            Kirigami.FormData.label: i18n("Temperature unit")
+            model: [
+                i18n("Celsius (°C)"),
+                i18n("Fahrenheit (°F)"),
+                i18n("Kelvin (K)")
             ]
         }
 
@@ -199,7 +264,7 @@ KCM.SimpleKCM {
         Controls.CheckBox {
             id: linkCheckbox
             Kirigami.FormData.label: i18n("Link sizes")
-            text: i18n("Keep cat, text and divider the same size")
+            text: i18n("Keep cat, CPU text, temperature and divider the same size")
             checked: true
             onCheckedChanged: if (checked) syncScales(catScaleSlider.value)
         }
@@ -222,7 +287,7 @@ KCM.SimpleKCM {
 
         RowLayout {
             Layout.fillWidth: true
-            Kirigami.FormData.label: i18n("Text size")
+            Kirigami.FormData.label: i18n("CPU percentage size")
             Controls.Slider {
                 id: textScaleSlider
                 Layout.fillWidth: true
@@ -232,6 +297,23 @@ KCM.SimpleKCM {
             }
             Controls.Label {
                 text: Math.round(textScaleSlider.value * 100) + "%"
+                Layout.minimumWidth: scaleLabelMetrics.width
+                horizontalAlignment: Text.AlignRight
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            Kirigami.FormData.label: i18n("Temperature size")
+            Controls.Slider {
+                id: tempScaleSlider
+                Layout.fillWidth: true
+                from: 0.25; to: 2.0; stepSize: 0.05; value: 1.0
+                enabled: !linkCheckbox.checked
+                onValueChanged: if (linkCheckbox.checked) syncScales(value)
+            }
+            Controls.Label {
+                text: Math.round(tempScaleSlider.value * 100) + "%"
                 Layout.minimumWidth: scaleLabelMetrics.width
                 horizontalAlignment: Text.AlignRight
             }
@@ -268,34 +350,17 @@ KCM.SimpleKCM {
             Controls.Label { text: i18n("px") }
         }
 
-        RowLayout {
-            Layout.fillWidth: true
-            Kirigami.FormData.label: i18n("Temperature size")
-            Controls.Slider {
-                id: tempScaleSlider
-                Layout.fillWidth: true
-                from: 0.25; to: 2.0; stepSize: 0.05; value: 1.0
-                enabled: !linkCheckbox.checked
-                onValueChanged: if (linkCheckbox.checked) syncScales(value)
-            }
-            Controls.Label {
-                text: Math.round(tempScaleSlider.value * 100) + "%"
-                Layout.minimumWidth: scaleLabelMetrics.width
-                horizontalAlignment: Text.AlignRight
-            }
-        }
-
-        // ── Sensor ───────────────────────────────────────────────────────────
+        // ── CPU Sensor ───────────────────────────────────────────────────────
 
         Kirigami.Separator {
-            Kirigami.FormData.label: i18n("Sensor")
+            Kirigami.FormData.label: i18n("CPU Sensor")
             Kirigami.FormData.isSection: true
             Layout.fillWidth: true
         }
 
         RowLayout {
             Layout.fillWidth: true
-            Kirigami.FormData.label: i18n("Idle threshold")
+            Kirigami.FormData.label: i18n("CPU idle threshold")
             Controls.Slider {
                 id: idleSlider
                 Layout.fillWidth: true
@@ -325,80 +390,13 @@ KCM.SimpleKCM {
             }
         }
 
-        // ── Temperature ────────────────────────────────────────────────────────
+        // ── Angry Mode ───────────────────────────────────────────────────────
         // Sensor settings here feed both the temperature meter and the Angry Cat trigger.
 
         Kirigami.Separator {
-            Kirigami.FormData.label: i18n("Temperature")
+            Kirigami.FormData.label: i18n("Angry Mode")
             Kirigami.FormData.isSection: true
             Layout.fillWidth: true
-        }
-
-        Controls.CheckBox {
-            id: showTempCheckBox
-            Kirigami.FormData.label: i18n("Meter")
-            text: i18n("Show temperature meter")
-        }
-
-        Controls.ComboBox {
-            id: tempUnitBox
-            Layout.fillWidth: true
-            enabled: showTempCheckBox.checked
-            Kirigami.FormData.label: i18n("Unit")
-            model: [
-                i18n("Celsius (°C)"),
-                i18n("Fahrenheit (°F)"),
-                i18n("Kelvin (K)")
-            ]
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            enabled: showTempCheckBox.checked || angryCheckbox.checked
-            Kirigami.FormData.label: i18n("Sensor")
-
-            Controls.TextField {
-                id: tempSensorField
-                Layout.fillWidth: true
-                placeholderText: "cpu/cpu0/temperature"
-            }
-        }
-
-        // Live readout — immediate feedback on whether the sensor ID is correct
-        Controls.Label {
-            enabled: showTempCheckBox.checked || angryCheckbox.checked
-            Kirigami.FormData.label: i18n("Reading")
-            text: previewSensor.value > 0
-                ? i18n("%1 °C", Math.round(previewSensor.value))
-                : i18n("No data — check sensor ID")
-            color: previewSensor.value > 0 ? Kirigami.Theme.positiveTextColor
-                                           : Kirigami.Theme.neutralTextColor
-        }
-
-        Controls.Label {
-            enabled: showTempCheckBox.checked || angryCheckbox.checked
-            Kirigami.FormData.label: " "
-            text: i18n("Find sensor IDs in KDE System Monitor › Sensors tab, right-click a sensor → Copy sensor name")
-            wrapMode: Text.WordWrap
-            Layout.maximumWidth: 340
-            font.italic: true
-            opacity: 0.6
-        }
-
-        Controls.SpinBox {
-            id: tempUpdateRateSpinBox
-            Layout.fillWidth: true
-            enabled: showTempCheckBox.checked || angryCheckbox.checked
-            Kirigami.FormData.label: i18n("Update rate")
-            from: 500; to: 60000; stepSize: 500; editable: true
-            textFromValue: function(value, locale) {
-                var s = value / 1000
-                return (s === 1) ? i18n("1 second") : i18n("%1 seconds", s)
-            }
-            valueFromText: function(text, locale) {
-                var v = parseFloat(text)
-                return isNaN(v) ? 5000 : Math.round(v * 1000)
-            }
         }
 
         Controls.CheckBox {
@@ -410,7 +408,7 @@ KCM.SimpleKCM {
         RowLayout {
             Layout.fillWidth: true
             enabled: angryCheckbox.checked
-            Kirigami.FormData.label: i18n("Threshold")
+            Kirigami.FormData.label: i18n("Temperature threshold")
 
             Controls.Slider {
                 id: angryTempSlider
@@ -423,6 +421,55 @@ KCM.SimpleKCM {
                 horizontalAlignment: Text.AlignRight
             }
             TextMetrics { id: angryTempMetrics; text: "120°C" }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            enabled: cfg_showTemp || angryCheckbox.checked
+            Kirigami.FormData.label: i18n("Temperature sensor")
+
+            Controls.TextField {
+                id: tempSensorField
+                Layout.fillWidth: true
+                placeholderText: "cpu/cpu0/temperature"
+            }
+        }
+
+        // Live readout — immediate feedback on whether the sensor ID is correct
+        Controls.Label {
+            enabled: cfg_showTemp || angryCheckbox.checked
+            Kirigami.FormData.label: i18n("Temperature reading")
+            text: previewSensor.value > 0
+                ? i18n("%1 °C", Math.round(previewSensor.value))
+                : i18n("No data — check sensor ID")
+            color: previewSensor.value > 0 ? Kirigami.Theme.positiveTextColor
+                                           : Kirigami.Theme.neutralTextColor
+        }
+
+        Controls.Label {
+            enabled: cfg_showTemp || angryCheckbox.checked
+            Kirigami.FormData.label: " "
+            text: i18n("Find sensor IDs in KDE System Monitor › Sensors tab, right-click a sensor → Copy sensor name")
+            wrapMode: Text.WordWrap
+            Layout.maximumWidth: 340
+            font.italic: true
+            opacity: 0.6
+        }
+
+        Controls.SpinBox {
+            id: tempUpdateRateSpinBox
+            Layout.fillWidth: true
+            enabled: cfg_showTemp || angryCheckbox.checked
+            Kirigami.FormData.label: i18n("Temperature update rate")
+            from: 500; to: 60000; stepSize: 500; editable: true
+            textFromValue: function(value, locale) {
+                var s = value / 1000
+                return (s === 1) ? i18n("1 second") : i18n("%1 seconds", s)
+            }
+            valueFromText: function(text, locale) {
+                var v = parseFloat(text)
+                return isNaN(v) ? 5000 : Math.round(v * 1000)
+            }
         }
     }
 }
