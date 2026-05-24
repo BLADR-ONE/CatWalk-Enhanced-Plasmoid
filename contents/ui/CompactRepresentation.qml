@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import org.kde.ksvg as KSvg
 import QtQuick.Layouts
 import org.kde.ksysguard.sensors as Sensors
@@ -82,7 +83,10 @@ Item {
         if (tempUnit === 2) return Math.round(c + 273.15) + " K"
         return Math.round(c) + "°C"
     }
-    readonly property string tempText: (tempSensor.value > 0) ? formatTemp(tempSensor.value) : "—"
+    function hasTempReading(c) {
+        return c !== undefined && c !== null && !isNaN(c)
+    }
+    readonly property string tempText: hasTempReading(tempSensor.value) ? formatTemp(tempSensor.value) : "—"
 
     // ── Element box sizes ───────────────────────────────────────────────────────
     readonly property real catBox: 32 * catScaleFactor
@@ -175,7 +179,8 @@ Item {
         width: useVertical ? compactRepresentation.width
              : (spacingIsAuto ? compactRepresentation.width
                               : contentMainH + sideCatPad + gapsForSizing * configuredSpacing)
-        height: useVertical ? totalMinHeight : compactRepresentation.height
+        height: useVertical ? (spacingIsAuto ? compactRepresentation.height : totalMinHeight)
+                            : compactRepresentation.height
 
         columns: useVertical ? 1 : Math.max(1, cellCount)
         rows:    useVertical ? Math.max(1, cellCount) : 1
@@ -191,7 +196,7 @@ Item {
             if (!useVertical) return baseSpacing
             if (spacingIsAuto) {
                 if (cellCount <= 1) return 0
-                return Math.max(baseSpacing, (totalMinHeight - contentMainV) / gapCount)
+                return Math.max(baseSpacing, (compactRepresentation.height - contentMainV) / gapCount)
             }
             return configuredSpacing
         }
@@ -220,6 +225,20 @@ Item {
             KSvg.SvgItem {
                 anchors.fill: parent
                 imagePath: currentCatImage
+
+                layer.enabled: isAngry
+                layer.effect: MultiEffect {
+                    colorization: {
+                        var ratio = Math.min(1, Math.max(0, (tempSensor.value - plasmoid.configuration.angryTemp) / 50))
+                        return 0.20 + 0.75 * ratio
+                    }
+                    colorizationColor: {
+                        var ratio = Math.min(1, Math.max(0, (tempSensor.value - plasmoid.configuration.angryTemp) / 50))
+                        return Qt.rgba(1, 1 - ratio, 0, 1)
+                    }
+                    Behavior on colorization    { NumberAnimation { duration: 500 } }
+                    Behavior on colorizationColor { ColorAnimation { duration: 500 } }
+                }
             }
         }
 

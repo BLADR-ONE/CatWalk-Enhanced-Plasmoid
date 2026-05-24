@@ -22,7 +22,7 @@
         "License": "GPL-3.0+",
         "Name": "CatWalk Enhanced",
         "Website": "https://github.com/BLADR-ONE/CatWalk-Enhanced-Plasmoid",
-        "Version": "1.0"
+        "Version": "1.2"
     },
     "X-Plasma-API-Minimum-Version": "6.0",
     "X-Plasma-Provides": [
